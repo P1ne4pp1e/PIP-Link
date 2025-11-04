@@ -246,7 +246,7 @@ class PIPLinkApp:
         """UDP 帧接收回调"""
         with self.video_frame_lock:
             self.video_frame = frame.copy()
-            print(f"[DEBUG] 帧已接收: {frame.shape}, dtype: {frame.dtype}")
+            # print(f"[DEBUG] 帧已接收: {frame.shape}, dtype: {frame.dtype}")
 
     def toggle_debug_panel(self):
         """切换调试面板的可见性"""

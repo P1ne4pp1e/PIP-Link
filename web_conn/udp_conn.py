@@ -108,8 +108,8 @@ class UDPReceiver:
                         # 清除缓冲
                         del self.frame_buffer[frame_id]
 
-                        print(f"[UDP Receiver] ✓ 接收完整帧 {frame_id} "
-                              f"({self.total_frames_received} 总帧数)")
+                        # print(f"[UDP Receiver] ✓ 接收完整帧 {frame_id} "
+                        #       f"({self.total_frames_received} 总帧数)")
 
             except Exception as e:
                 if self.is_running:
