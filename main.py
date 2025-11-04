@@ -53,7 +53,7 @@ class PIPLinkApp:
 
         self.debug_panel = Panel(20, 20, panel_width, panel_height, "debug_panel")
         self.debug_panel.title = "Connection & Debug"
-        self.debug_panel.background_color = (50, 50, 55, 230)
+        self.debug_panel.background_color = (50, 50, 55)
         self.debug_panel.alpha = 0.95
         self.debug_panel.title_color = (70, 130, 180)
         self.debug_panel.border_color = (70, 130, 180)
@@ -297,6 +297,7 @@ class PIPLinkApp:
                 # 没有视频时显示灰色背景
                 canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 canvas[:] = self.root.background_color
+                # cv2.circle(canvas, (self.width // 2, self.height // 2), 5, (255, 255, 255), 3)
 
             # 更新UI
             self.root.update(dt)
@@ -309,10 +310,10 @@ class PIPLinkApp:
 
             # 每 30 帧打印一次调试信息
             frame_count += 1
-            if frame_count % 30 == 0:
-                has_video = "✓" if self.video_frame is not None else "✗"
-                print(f"[DEBUG] 帧数: {frame_count}, 有视频: {has_video}, "
-                      f"总接收帧: {self.udp_receiver.total_frames_received if self.udp_receiver else 0}")
+            # if frame_count % 30 == 0:
+            #     has_video = "✓" if self.video_frame is not None else "✗"
+            #     print(f"[DEBUG] 帧数: {frame_count}, 有视频: {has_video}, "
+            #           f"总接收帧: {self.udp_receiver.total_frames_received if self.udp_receiver else 0}")
 
             # 按键处理
             key = cv2.waitKey(1) & 0xFF

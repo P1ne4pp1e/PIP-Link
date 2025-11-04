@@ -137,17 +137,17 @@ class Object:
         ax, ay = self.absolute_position
 
         # 绘制背景
-        if self.alpha < 1.0:
-            # 支持透明度
-            overlay = canvas.copy()
-            cv2.rectangle(overlay, (ax, ay),
-                          (ax + self.width, ay + self.height),
-                          self.background_color, -1)
-            cv2.addWeighted(overlay, self.alpha, canvas, 1 - self.alpha, 0, canvas)
-        else:
-            cv2.rectangle(canvas, (ax, ay),
-                          (ax + self.width, ay + self.height),
-                          self.background_color, -1)
+        # if self.alpha < 1.0:
+        #     # 支持透明度
+        #     overlay = canvas.copy()
+        #     cv2.rectangle(overlay, (ax, ay),
+        #                   (ax + self.width, ay + self.height),
+        #                   self.background_color, -1)
+        #     cv2.addWeighted(overlay, self.alpha, canvas, 1 - self.alpha, 0, canvas)
+        # else:
+        #     cv2.rectangle(canvas, (ax, ay),
+        #                   (ax + self.width, ay + self.height),
+        #                   self.background_color, -1)
 
         # 绘制边框
         if self.border_width > 0:
