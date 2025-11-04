@@ -16,6 +16,7 @@ class TCPConnection:
         self.socket = None
         self.timeout = timeout
         self.is_connected = False
+        self.keep_alive_thread = None
 
         # 回调函数
         self.on_connecting: Optional[Callable] = None  # 开始连接时
@@ -53,6 +54,7 @@ class TCPConnection:
 
             # 创建TCP socket
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket.settimeout(self.timeout)
 
             # 尝试连接
@@ -60,12 +62,20 @@ class TCPConnection:
             self.socket.connect((ip, port))
 
             # 连接成功
-            print(f"[TCP] Handshake successful! Server now knows our IP")
+            print(f"[TCP] Handshake successful! Connected to {ip}:{port}")
 
-            # 可选: 发送握手消息
-            # self.socket.send(b"CLIENT_HANDSHAKE")
+            # 发送 UDP 端口信息给服务器（需要从外部传入）
+            if hasattr(self, 'udp_port'):
+                try:
+                    message = f"UDP_PORT:{self.udp_port}"
+                    self.socket.send(message.encode('utf-8'))
+                    print(f"[TCP] 已发送 UDP 端口: {self.udp_port}")
+                except Exception as e:
+                    print(f"[TCP] 发送 UDP 端口失败: {e}")
+            else:
+                print("[TCP] ⚠️  未设置 UDP 端口")
 
-            # 等待服务端可能的响应
+            # 尝试接收服务器响应
             self.socket.settimeout(1)
             try:
                 response = self.socket.recv(1024)
@@ -74,17 +84,16 @@ class TCPConnection:
             except socket.timeout:
                 pass
 
-            # 关闭TCP连接
-            self.close()
-
-            # 标记为已连接(握手成功)
+            # ✅ 改进：不立即关闭连接，保持连接并定期发送心跳
             self.is_connected = True
+            print("[TCP] Connection maintained for UDP communication")
 
             # 触发成功回调
             if self.on_success:
                 self.on_success()
 
-            print("[TCP] Handshake completed, ready for UDP communication")
+            # 启动心跳线程保持连接活跃
+            self._start_keep_alive()
 
         except socket.timeout:
             print(f"[TCP] Connection timeout after {self.timeout}s")
@@ -103,6 +112,20 @@ class TCPConnection:
             if self.on_error:
                 self.on_error(e)
             self.cleanup()
+
+    def _start_keep_alive(self):
+        """启动心跳线程，保持连接活跃"""
+
+        def keep_alive():
+            while self.is_connected and self.socket:
+                try:
+                    # 每 5 秒发送一个心跳包
+                    self.socket.send(b'\x00')
+                except:
+                    break
+
+        self.keep_alive_thread = threading.Thread(target=keep_alive, daemon=True)
+        self.keep_alive_thread.start()
 
     def close(self):
         """关闭TCP连接"""
