@@ -38,6 +38,10 @@ class PIPLinkApp:
         self.video_frame = None
         self.video_frame_lock = threading.Lock()
 
+        # 连接状态更新计时器
+        self.status_update_timer = 0
+        self.status_update_interval = 0.5  # 每 0.5 秒更新一次状态显示
+
         # 初始化UI
         self.setup_ui()
 
@@ -49,7 +53,7 @@ class PIPLinkApp:
 
         # ===== 左上角调试面板 =====
         panel_width = 360
-        panel_height = 320
+        panel_height = 360
 
         self.debug_panel = Panel(20, 20, panel_width, panel_height, "debug_panel")
         self.debug_panel.title = "Connection & Debug"
@@ -69,8 +73,16 @@ class PIPLinkApp:
         self.connection_status.align = "left"
         self.debug_panel.add_child(self.connection_status)
 
+        # 连接时长标签
+        self.connection_duration = Label(20, 80, 320, 20, "Duration: --:--:--", "duration_label")
+        self.connection_duration.text_color = (200, 200, 200)
+        self.connection_duration.font_scale = 0.45
+        self.connection_duration.background_color = (50, 50, 55)
+        self.connection_duration.align = "left"
+        self.debug_panel.add_child(self.connection_duration)
+
         # IP地址标签
-        ip_label = Label(20, 85, 320, 20, "Server IP:", "ip_label")
+        ip_label = Label(20, 105, 320, 20, "Server IP:", "ip_label")
         ip_label.text_color = (200, 200, 200)
         ip_label.font_scale = 0.45
         ip_label.background_color = (50, 50, 55)
@@ -78,7 +90,7 @@ class PIPLinkApp:
         self.debug_panel.add_child(ip_label)
 
         # IP地址输入框
-        self.ip_textbox = TextBox(20, 110, 320, 36, "ip_textbox")
+        self.ip_textbox = TextBox(20, 130, 320, 36, "ip_textbox")
         self.ip_textbox.placeholder = "192.168.1.100"
         self.ip_textbox.max_length = 15
         self.ip_textbox.font_scale = 0.5
@@ -86,7 +98,7 @@ class PIPLinkApp:
         self.debug_panel.add_child(self.ip_textbox)
 
         # 端口号标签
-        port_label = Label(20, 155, 320, 20, "Port:", "port_label")
+        port_label = Label(20, 175, 320, 20, "Port:", "port_label")
         port_label.text_color = (200, 200, 200)
         port_label.font_scale = 0.45
         port_label.background_color = (50, 50, 55)
@@ -94,7 +106,7 @@ class PIPLinkApp:
         self.debug_panel.add_child(port_label)
 
         # 端口号输入框
-        self.port_textbox = TextBox(20, 180, 320, 36, "port_textbox")
+        self.port_textbox = TextBox(20, 200, 320, 36, "port_textbox")
         self.port_textbox.placeholder = "8888"
         self.port_textbox.max_length = 5
         self.port_textbox.font_scale = 0.5
@@ -102,7 +114,7 @@ class PIPLinkApp:
         self.debug_panel.add_child(self.port_textbox)
 
         # 连接/断开按钮
-        self.connect_button = Button(20, 230, 320, 40, "Connect", "connect_btn")
+        self.connect_button = Button(20, 250, 320, 40, "Connect", "connect_btn")
         self.connect_button.background_color = (70, 130, 180)
         self.connect_button.hover_color = (90, 150, 200)
         self.connect_button.pressed_color = (50, 110, 160)
@@ -111,10 +123,11 @@ class PIPLinkApp:
         self.debug_panel.add_child(self.connect_button)
 
         # 提示信息标签
-        self.hint_label = Label(20, 280, 320, 30, "Press ESC to toggle panel", "hint_label")
+        self.hint_label = Label(20, 300, 320, 50, "Press ESC to toggle\nDebug Panel", "hint_label")
         self.hint_label.text_color = (150, 150, 150)
         self.hint_label.font_scale = 0.4
         self.hint_label.align = "center"
+        self.hint_label.valign = "center"
         self.hint_label.background_color = (50, 50, 55)
         self.debug_panel.add_child(self.hint_label)
 
@@ -157,6 +170,7 @@ class PIPLinkApp:
         self.tcp_conn.on_timeout = self.on_tcp_timeout
         self.tcp_conn.on_refused = self.on_tcp_refused
         self.tcp_conn.on_error = self.on_tcp_error
+        self.tcp_conn.on_disconnected = self.on_tcp_disconnected
 
     def on_tcp_connecting(self):
         """TCP开始连接"""
@@ -180,6 +194,7 @@ class PIPLinkApp:
         self.connection_status.text = "Status: Connection Timeout"
         self.connection_status.text_color = (255, 100, 100)
         self.info_label.text = "Connection timeout\nCheck IP/Port and network"
+        self.stop_udp_receiver()
 
     def on_tcp_refused(self):
         """TCP连接被拒绝"""
@@ -193,6 +208,19 @@ class PIPLinkApp:
         self.connection_status.text_color = (255, 100, 100)
         self.info_label.text = f"Connection failed\n{str(error)}"
 
+    def on_tcp_disconnected(self):
+        """TCP连接断开"""
+        self.is_connected = False
+        self.connect_button.text = "Connect"
+        self.connect_button.background_color = (70, 130, 180)
+        self.connection_status.text = "Status: Disconnected"
+        self.connection_status.text_color = (255, 100, 100)
+        self.connection_duration.text = "Duration: --:--:--"
+        self.info_label.text = "Connection lost"
+        # TCP断开时停止UDP接收
+        self.stop_udp_receiver()
+        print("[INFO] TCP connection lost, UDP receiver stopped")
+
     def on_connect_click(self, obj):
         """连接按钮点击回调"""
         if self.is_connected:
@@ -204,7 +232,8 @@ class PIPLinkApp:
             self.connect_button.background_color = (70, 130, 180)
             self.connection_status.text = "Status: Disconnected"
             self.connection_status.text_color = (255, 100, 100)
-            self.info_label.text = "Connection closed"
+            self.connection_duration.text = "Duration: --:--:--"
+            self.info_label.text = "Connection closed by user"
             print("[INFO] Connection closed by user")
             return
 
@@ -246,7 +275,6 @@ class PIPLinkApp:
         """UDP 帧接收回调"""
         with self.video_frame_lock:
             self.video_frame = frame.copy()
-            # print(f"[DEBUG] 帧已接收: {frame.shape}, dtype: {frame.dtype}")
 
     def toggle_debug_panel(self):
         """切换调试面板的可见性"""
@@ -276,6 +304,14 @@ class PIPLinkApp:
             dt = current_time - last_time
             last_time = current_time
 
+            # 更新连接时长显示
+            self.status_update_timer += dt
+            if self.status_update_timer >= self.status_update_interval:
+                if self.is_connected:
+                    duration_str = self.tcp_conn.get_connection_time_str()
+                    self.connection_duration.text = f"Duration: {duration_str}"
+                self.status_update_timer = 0
+
             # 创建画布 - 直接用视频流作为背景
             if self.video_frame is not None:
                 with self.video_frame_lock:
@@ -297,7 +333,6 @@ class PIPLinkApp:
                 # 没有视频时显示灰色背景
                 canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 canvas[:] = self.root.background_color
-                # cv2.circle(canvas, (self.width // 2, self.height // 2), 5, (255, 255, 255), 3)
 
             # 更新UI
             self.root.update(dt)
@@ -307,13 +342,6 @@ class PIPLinkApp:
 
             # 显示
             cv2.imshow(self.window_name, canvas)
-
-            # 每 30 帧打印一次调试信息
-            frame_count += 1
-            # if frame_count % 30 == 0:
-            #     has_video = "✓" if self.video_frame is not None else "✗"
-            #     print(f"[DEBUG] 帧数: {frame_count}, 有视频: {has_video}, "
-            #           f"总接收帧: {self.udp_receiver.total_frames_received if self.udp_receiver else 0}")
 
             # 按键处理
             key = cv2.waitKey(1) & 0xFF
