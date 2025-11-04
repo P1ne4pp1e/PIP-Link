@@ -45,28 +45,41 @@ class Label(Object):
                           (ax + self.width, ay + self.height),
                           self.border_color, self.border_width)
 
-        # 绘制文本
+        # 绘制文本 - 支持多行
         if self.text:
-            text_size = cv2.getTextSize(self.text, self.font, self.font_scale, self.font_thickness)[0]
+            lines = self.text.split('\n')
+            line_height = cv2.getTextSize('A', self.font, self.font_scale, self.font_thickness)[0][1] + 5
 
-            # 水平对齐
-            if self.align == "center":
-                text_x = ax + (self.width - text_size[0]) // 2
-            elif self.align == "right":
-                text_x = ax + self.width - text_size[0] - 5
-            else:  # left
-                text_x = ax + 5
+            # 计算总文本高度
+            total_text_height = len(lines) * line_height
 
-            # 垂直对齐
+            # 根据垂直对齐计算起始y坐标
             if self.valign == "center":
-                text_y = ay + (self.height + text_size[1]) // 2
+                start_y = ay + (self.height - total_text_height) // 2 + line_height
             elif self.valign == "bottom":
-                text_y = ay + self.height - 5
+                start_y = ay + self.height - total_text_height
             else:  # top
-                text_y = ay + text_size[1] + 5
+                start_y = ay + line_height
 
-            cv2.putText(canvas, self.text, (text_x, text_y),
-                        self.font, self.font_scale, self.text_color, self.font_thickness)
+            # 绘制每一行
+            for i, line in enumerate(lines):
+                if not line:  # 跳过空行但保留行距
+                    continue
+
+                text_size = cv2.getTextSize(line, self.font, self.font_scale, self.font_thickness)[0]
+
+                # 水平对齐
+                if self.align == "center":
+                    text_x = ax + (self.width - text_size[0]) // 2
+                elif self.align == "right":
+                    text_x = ax + self.width - text_size[0] - 5
+                else:  # left
+                    text_x = ax + 5
+
+                text_y = start_y + i * line_height
+
+                cv2.putText(canvas, line, (text_x, text_y),
+                            self.font, self.font_scale, self.text_color, self.font_thickness)
 
         # 绘制子对象
         for child in self.children:
