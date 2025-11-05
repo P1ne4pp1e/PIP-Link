@@ -4,11 +4,11 @@ import cv2
 import numpy as np
 import time
 from typing import Optional, Callable, Dict
-from collections import defaultdict
+from collections import defaultdict, deque
 
 
 class UDPReceiver:
-    """UDP 视频流接收器 - 增强版（支持丢包统计和内存保护）"""
+    """UDP 视频流接收器 - 增强版（支持丢包统计、带宽统计和内存保护）"""
 
     def __init__(self, local_port: int = 9999, buffer_timeout: float = 2.0):
         """
@@ -47,6 +47,19 @@ class UDPReceiver:
         self.recent_packet_loss_rate = 0.0
         self.last_stats_time = time.time()
 
+        # ===== 新增：带宽统计 =====
+        self.total_bytes_received = 0  # 总接收字节数
+        self.recent_bytes_received = 0  # 最近1秒接收字节数
+        self.current_bandwidth_mbps = 0.0  # 当前带宽 (Mbps)
+        self.average_bandwidth_mbps = 0.0  # 平均带宽 (Mbps)
+        self.peak_bandwidth_mbps = 0.0  # 峰值带宽 (Mbps)
+
+        # 带宽历史记录（最近10秒）
+        self.bandwidth_history = deque(maxlen=10)  # 存储最近10秒的带宽数据
+
+        # 启动时间（用于计算平均带宽）
+        self.start_time = None
+
     def start(self):
         """启动 UDP 接收器"""
         if self.is_running:
@@ -58,6 +71,7 @@ class UDPReceiver:
             self.socket.bind(('0.0.0.0', self.local_port))
 
             self.is_running = True
+            self.start_time = time.time()
 
             # 启动接收线程
             self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
@@ -107,6 +121,42 @@ class UDPReceiver:
             return 0.0
         return self.total_packets_lost / self.total_packets_expected
 
+    def get_bandwidth_mbps(self) -> float:
+        """
+        获取当前带宽 (Mbps)
+
+        Returns:
+            当前带宽 (Mbps)
+        """
+        return self.current_bandwidth_mbps
+
+    def get_average_bandwidth_mbps(self) -> float:
+        """
+        获取平均带宽 (Mbps)
+
+        Returns:
+            平均带宽 (Mbps)
+        """
+        return self.average_bandwidth_mbps
+
+    def get_peak_bandwidth_mbps(self) -> float:
+        """
+        获取峰值带宽 (Mbps)
+
+        Returns:
+            峰值带宽 (Mbps)
+        """
+        return self.peak_bandwidth_mbps
+
+    def get_bandwidth_history(self) -> list:
+        """
+        获取带宽历史记录（最近10秒）
+
+        Returns:
+            带宽历史列表
+        """
+        return list(self.bandwidth_history)
+
     def get_statistics(self) -> dict:
         """
         获取详细统计信息
@@ -124,7 +174,13 @@ class UDPReceiver:
             'total_frames_dropped': self.total_frames_dropped,
             'recent_packet_loss_rate': self.recent_packet_loss_rate,
             'overall_packet_loss_rate': overall_loss_rate,
-            'buffer_size': len(self.frame_buffer)
+            'buffer_size': len(self.frame_buffer),
+            # 新增带宽统计
+            'total_bytes_received': self.total_bytes_received,
+            'current_bandwidth_mbps': self.current_bandwidth_mbps,
+            'average_bandwidth_mbps': self.average_bandwidth_mbps,
+            'peak_bandwidth_mbps': self.peak_bandwidth_mbps,
+            'bandwidth_history': self.get_bandwidth_history()
         }
 
     def _receive_loop(self):
@@ -132,6 +188,11 @@ class UDPReceiver:
         while self.is_running:
             try:
                 data, addr = self.socket.recvfrom(65507)  # UDP 最大包大小
+
+                # 统计接收字节数
+                bytes_received = len(data)
+                self.total_bytes_received += bytes_received
+                self.recent_bytes_received += bytes_received
 
                 # 解析包头
                 if len(data) < 8:
@@ -238,9 +299,27 @@ class UDPReceiver:
         else:
             self.recent_packet_loss_rate = 0.0
 
+        # ===== 计算带宽 =====
+        # 当前带宽 (Mbps) = (最近1秒接收字节数 * 8) / 1,000,000
+        self.current_bandwidth_mbps = (self.recent_bytes_received * 8) / 1_000_000
+
+        # 更新峰值带宽
+        if self.current_bandwidth_mbps > self.peak_bandwidth_mbps:
+            self.peak_bandwidth_mbps = self.current_bandwidth_mbps
+
+        # 计算平均带宽
+        if self.start_time:
+            elapsed_time = time.time() - self.start_time
+            if elapsed_time > 0:
+                self.average_bandwidth_mbps = (self.total_bytes_received * 8) / (elapsed_time * 1_000_000)
+
+        # 添加到历史记录
+        self.bandwidth_history.append(self.current_bandwidth_mbps)
+
         # 重置计数器
         self.recent_packets_received = 0
         self.recent_packets_expected = 0
+        self.recent_bytes_received = 0
 
     def _reassemble_frame(self, frame_id: int, total_packets: int) -> Optional[bytes]:
         """
@@ -285,6 +364,9 @@ if __name__ == '__main__':
                   f"Packets: {stats['total_packets_received']}/{stats['total_packets_expected']} | "
                   f"Loss Rate: {stats['recent_packet_loss_rate'] * 100:.2f}% (recent) / "
                   f"{stats['overall_packet_loss_rate'] * 100:.2f}% (overall) | "
+                  f"Bandwidth: {stats['current_bandwidth_mbps']:.2f} Mbps (current) / "
+                  f"{stats['average_bandwidth_mbps']:.2f} Mbps (avg) / "
+                  f"{stats['peak_bandwidth_mbps']:.2f} Mbps (peak) | "
                   f"Dropped: {stats['total_frames_dropped']} | "
                   f"Buffer: {stats['buffer_size']}", end='')
 
