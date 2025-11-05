@@ -15,6 +15,21 @@ from web_conn.params_receiver import ParamsReceiver
 class PIPLinkApp:
     def __init__(self):
         self.window_name = 'PIP-Link'
+
+        # 窗口模式和分辨率管理
+        self.window_mode = "windowed"  # "windowed" 或 "fullscreen"
+        self.available_resolutions = [
+            ("1920x1080 (16:9)", (1920, 1080)),
+            ("1600x900 (16:9)", (1600, 900)),
+            ("1280x720 (16:9)", (1280, 720)),
+            ("1680x1050 (16:10)", (1680, 1050)),
+            ("1440x900 (16:10)", (1440, 900)),
+            ("1280x800 (16:10)", (1280, 800)),
+            ("1024x768 (4:3)", (1024, 768)),
+            ("800x600 (4:3)", (800, 600)),
+        ]
+        self.current_resolution_index = 6  # 默认 1024x768
+
         self.width = 1024
         self.height = 768
 
@@ -70,8 +85,8 @@ class PIPLinkApp:
         self.root.background_color = (30, 30, 30)
 
         # ===== 选项卡式调试面板 =====
-        panel_width = 420
-        panel_height = 500  # 从 400 增加到 500
+        panel_width = 550
+        panel_height = 600  # 从 400 增加到 500
 
         self.debug_panel = TabbedPanel(20, 20, panel_width, panel_height, "debug_panel")
         self.root.add_child(self.debug_panel)
@@ -81,6 +96,7 @@ class PIPLinkApp:
         self.debug_panel.add_tab("Stream", self.build_stream_tab)
         self.debug_panel.add_tab("Clients", self.build_clients_tab)
         self.debug_panel.add_tab("Statistics", self.build_statistics_tab)
+        self.debug_panel.add_tab("Display", self.build_display_tab)  # 新增
 
         # ===== 右下角信息显示 =====
         info_width = 300
@@ -105,7 +121,7 @@ class PIPLinkApp:
 
         # 连接状态（只创建一次）
         if self.conn_status_label is None:
-            self.conn_status_label = Label(10, 10, 380, 25, "Status: Disconnected", "conn_status")
+            self.conn_status_label = Label(10, 10, 510, 25, "Status: Disconnected", "conn_status")
             self.conn_status_label.text_color = (255, 100, 100)
             self.conn_status_label.background_color = (45, 45, 52)
             self.conn_status_label.font_scale = 0.5
@@ -115,7 +131,7 @@ class PIPLinkApp:
 
         # 连接时长（只创建一次）
         if self.conn_duration_label is None:
-            self.conn_duration_label = Label(10, 40, 380, 20, "Duration: --:--:--", "conn_duration")
+            self.conn_duration_label = Label(10, 40, 510, 20, "Duration: --:--:--", "conn_duration")
             self.conn_duration_label.text_color = (200, 200, 200)
             self.conn_duration_label.background_color = (45, 45, 52)
             self.conn_duration_label.font_scale = 0.45
@@ -124,7 +140,7 @@ class PIPLinkApp:
         items.append(self.conn_duration_label)
 
         # IP 标签
-        ip_label = Label(10, 70, 380, 20, "Server IP:", "ip_label")
+        ip_label = Label(10, 70, 510, 20, "Server IP:", "ip_label")
         ip_label.text_color = (200, 200, 200)
         ip_label.background_color = (45, 45, 52)
         ip_label.font_scale = 0.45
@@ -133,7 +149,7 @@ class PIPLinkApp:
         items.append(ip_label)
 
         # IP 输入框
-        self.ip_textbox = TextBox(10, 95, 380, 36, "ip_textbox")
+        self.ip_textbox = TextBox(10, 95, 510, 36, "ip_textbox")
         self.ip_textbox.placeholder = "192.168.1.100"
         self.ip_textbox.max_length = 15
         self.ip_textbox.font_scale = 0.5
@@ -141,7 +157,7 @@ class PIPLinkApp:
         items.append(self.ip_textbox)
 
         # 端口标签
-        port_label = Label(10, 140, 380, 20, "Port:", "port_label")
+        port_label = Label(10, 140, 510, 20, "Port:", "port_label")
         port_label.text_color = (200, 200, 200)
         port_label.background_color = (45, 45, 52)
         port_label.font_scale = 0.45
@@ -150,7 +166,7 @@ class PIPLinkApp:
         items.append(port_label)
 
         # 端口输入框
-        self.port_textbox = TextBox(10, 165, 380, 36, "port_textbox")
+        self.port_textbox = TextBox(10, 165, 510, 36, "port_textbox")
         self.port_textbox.placeholder = "8888"
         self.port_textbox.max_length = 5
         self.port_textbox.font_scale = 0.5
@@ -158,7 +174,7 @@ class PIPLinkApp:
         items.append(self.port_textbox)
 
         # 连接按钮
-        self.connect_button = Button(10, 215, 380, 40, "Connect", "connect_btn")
+        self.connect_button = Button(10, 215, 510, 40, "Connect", "connect_btn")
         self.connect_button.background_color = (70, 130, 180)
         self.connect_button.hover_color = (90, 150, 200)
         self.connect_button.pressed_color = (50, 110, 160)
@@ -184,7 +200,7 @@ class PIPLinkApp:
                 items.append(self._create_param_label(10, 100, f"Target FPS: {stream.target_fps}"))
                 items.append(self._create_param_label(10, 130, f"Actual FPS: {stream.actual_fps:.1f}"))
             else:
-                label = Label(10, 10, 380, 25, "No stream parameters received", "no_params")
+                label = Label(10, 10, 510, 25, "No stream parameters received", "no_params")
                 label.text_color = (150, 150, 150)
                 label.background_color = (45, 45, 52)
                 label.font_scale = 0.5
@@ -206,7 +222,7 @@ class PIPLinkApp:
                     y_offset = 10
                     for idx, client in enumerate(clients, 1):
                         # 客户端标题
-                        title = Label(10, y_offset, 380, 25, f"Client #{idx} (ID {client.client_id})",
+                        title = Label(10, y_offset, 510, 25, f"Client #{idx} (ID {client.client_id})",
                                       f"client_{idx}_title")
                         title.text_color = (100, 200, 255)
                         title.background_color = (45, 45, 52)
@@ -217,7 +233,7 @@ class PIPLinkApp:
                         y_offset += 30
 
                         # TCP 信息
-                        tcp_info = Label(20, y_offset, 360, 20, f"TCP: {client.ip}:{client.tcp_port}",
+                        tcp_info = Label(20, y_offset, 490, 20, f"TCP: {client.ip}:{client.tcp_port}",
                                          f"client_{idx}_tcp")
                         tcp_info.text_color = (220, 220, 225)
                         tcp_info.background_color = (45, 45, 52)
@@ -228,7 +244,7 @@ class PIPLinkApp:
                         y_offset += 25
 
                         # UDP 信息
-                        udp_info = Label(20, y_offset, 360, 20, f"UDP: :{client.udp_port}", f"client_{idx}_udp")
+                        udp_info = Label(20, y_offset, 490, 20, f"UDP: :{client.udp_port}", f"client_{idx}_udp")
                         udp_info.text_color = (220, 220, 225)
                         udp_info.background_color = (45, 45, 52)
                         udp_info.font_scale = 0.45
@@ -238,7 +254,7 @@ class PIPLinkApp:
                         y_offset += 25
 
                         # 连接时间
-                        time_info = Label(20, y_offset, 360, 20, f"Connected: {client.connected_time}",
+                        time_info = Label(20, y_offset, 490, 20, f"Connected: {client.connected_time}",
                                           f"client_{idx}_time")
                         time_info.text_color = (150, 150, 155)
                         time_info.background_color = (45, 45, 52)
@@ -248,7 +264,7 @@ class PIPLinkApp:
                         items.append(time_info)
                         y_offset += 35
                 else:
-                    label = Label(10, 10, 380, 25, "No clients connected", "no_clients")
+                    label = Label(10, 10, 510, 25, "No clients connected", "no_clients")
                     label.text_color = (150, 150, 150)
                     label.background_color = (45, 45, 52)
                     label.font_scale = 0.5
@@ -256,7 +272,7 @@ class PIPLinkApp:
                     label.align = "left"
                     items.append(label)
             else:
-                label = Label(10, 10, 380, 25, "No client data available", "no_data")
+                label = Label(10, 10, 510, 25, "No client data available", "no_data")
                 label.text_color = (150, 150, 150)
                 label.background_color = (45, 45, 52)
                 label.font_scale = 0.5
@@ -271,7 +287,7 @@ class PIPLinkApp:
         items = []
 
         # 接收帧数
-        frames_label = Label(10, 10, 380, 25, f"Frames Received: {self.frames_received}", "frames_label")
+        frames_label = Label(10, 10, 510, 25, f"Frames Received: {self.frames_received}", "frames_label")
         frames_label.text_color = (240, 240, 245)
         frames_label.background_color = (45, 45, 52)
         frames_label.font_scale = 0.5
@@ -280,7 +296,7 @@ class PIPLinkApp:
         items.append(frames_label)
 
         # 延迟
-        latency_label = Label(10, 40, 380, 25, f"Network Latency: {self.latency_ms:.1f} ms", "latency_label")
+        latency_label = Label(10, 40, 510, 25, f"Network Latency: {self.latency_ms:.1f} ms", "latency_label")
         latency_label.text_color = (240, 240, 245)
         latency_label.background_color = (45, 45, 52)
         latency_label.font_scale = 0.5
@@ -294,7 +310,7 @@ class PIPLinkApp:
                                                                                                                   100,
                                                                                                                   100)
 
-        status_label = Label(10, 70, 380, 25, f"Latency Status: {latency_status}", "latency_status")
+        status_label = Label(10, 70, 510, 25, f"Latency Status: {latency_status}", "latency_status")
         status_label.text_color = latency_color
         status_label.background_color = (45, 45, 52)
         status_label.font_scale = 0.5
@@ -308,7 +324,7 @@ class PIPLinkApp:
 
             # 最近丢包率
             recent_loss = stats['recent_packet_loss_rate'] * 100
-            recent_loss_label = Label(10, 100, 380, 25,
+            recent_loss_label = Label(10, 100, 510, 25,
                                       f"Packet Loss (Recent): {recent_loss:.2f}%",
                                       "recent_loss")
             recent_loss_label.background_color = (45, 45, 52)
@@ -328,7 +344,7 @@ class PIPLinkApp:
 
             # 总体丢包率
             overall_loss = stats['overall_packet_loss_rate'] * 100
-            overall_loss_label = Label(10, 130, 380, 25,
+            overall_loss_label = Label(10, 130, 510, 25,
                                        f"Packet Loss (Overall): {overall_loss:.2f}%",
                                        "overall_loss")
             overall_loss_label.text_color = (200, 200, 205)
@@ -341,7 +357,7 @@ class PIPLinkApp:
             # ===== 新增：带宽统计 =====
             # 当前带宽
             current_bw = stats['current_bandwidth_mbps']
-            current_bw_label = Label(10, 160, 380, 25,
+            current_bw_label = Label(10, 160, 510, 25,
                                      f"Bandwidth (Current): {current_bw:.2f} Mbps",
                                      "current_bw")
             current_bw_label.background_color = (45, 45, 52)
@@ -361,7 +377,7 @@ class PIPLinkApp:
 
             # 平均带宽
             avg_bw = stats['average_bandwidth_mbps']
-            avg_bw_label = Label(10, 190, 380, 25,
+            avg_bw_label = Label(10, 190, 510, 25,
                                  f"Bandwidth (Average): {avg_bw:.2f} Mbps",
                                  "avg_bw")
             avg_bw_label.text_color = (200, 200, 205)
@@ -373,7 +389,7 @@ class PIPLinkApp:
 
             # 峰值带宽
             peak_bw = stats['peak_bandwidth_mbps']
-            peak_bw_label = Label(10, 220, 380, 25,
+            peak_bw_label = Label(10, 220, 510, 25,
                                   f"Bandwidth (Peak): {peak_bw:.2f} Mbps",
                                   "peak_bw")
             peak_bw_label.text_color = (150, 200, 255)  # 浅蓝色 - 峰值
@@ -385,7 +401,7 @@ class PIPLinkApp:
 
             # 总接收数据量
             total_mb = stats['total_bytes_received'] / (1024 * 1024)
-            total_data_label = Label(10, 250, 380, 25,
+            total_data_label = Label(10, 250, 510, 25,
                                      f"Total Data: {total_mb:.2f} MB",
                                      "total_data")
             total_data_label.text_color = (200, 200, 205)
@@ -396,7 +412,7 @@ class PIPLinkApp:
             items.append(total_data_label)
 
             # 数据包统计
-            packets_label = Label(10, 280, 380, 25,
+            packets_label = Label(10, 280, 510, 25,
                                   f"Packets: {stats['total_packets_received']}/{stats['total_packets_expected']}",
                                   "packets_stats")
             packets_label.text_color = (150, 150, 155)
@@ -407,7 +423,7 @@ class PIPLinkApp:
             items.append(packets_label)
 
             # 丢弃帧数
-            dropped_label = Label(10, 310, 380, 25,
+            dropped_label = Label(10, 310, 510, 25,
                                   f"Frames Dropped: {stats['total_frames_dropped']}",
                                   "dropped_frames")
             dropped_label.text_color = (255, 150, 100)
@@ -418,7 +434,7 @@ class PIPLinkApp:
             items.append(dropped_label)
 
         else:
-            no_data_label = Label(10, 100, 380, 25, "No UDP connection", "no_udp")
+            no_data_label = Label(10, 100, 510, 25, "No UDP connection", "no_udp")
             no_data_label.text_color = (150, 150, 150)
             no_data_label.background_color = (45, 45, 52)
             no_data_label.font_scale = 0.5
@@ -430,7 +446,7 @@ class PIPLinkApp:
         time_since_update = time.time() - self.last_param_time if self.last_param_time > 0 else 999
         update_text = f"Last Update: {time_since_update:.1f}s ago" if time_since_update < 10 else "No recent updates"
 
-        update_label = Label(10, 340, 380, 25, update_text, "last_update")
+        update_label = Label(10, 340, 510, 25, update_text, "last_update")
         update_label.text_color = (150, 150, 155)
         update_label.background_color = (45, 45, 52)
         update_label.font_scale = 0.4
@@ -440,10 +456,157 @@ class PIPLinkApp:
 
         return items
 
+    def build_display_tab(self):
+        """构建显示设置选项卡"""
+        items = []
+
+        # 窗口模式标签
+        mode_label = Label(10, 10, 510, 20, "Window Mode:", "mode_label")
+        mode_label.text_color = (200, 200, 200)
+        mode_label.background_color = (45, 45, 52)
+        mode_label.font_scale = 0.45
+        mode_label.font_thickness = 1
+        mode_label.align = "left"
+        items.append(mode_label)
+
+        # 窗口模式按钮（改为单行，更宽）
+        windowed_btn = Button(10, 35, 250, 40, "Windowed Mode", "windowed_btn")
+        windowed_btn.background_color = (70, 130, 180) if self.window_mode == "windowed" else (55, 55, 62)
+        windowed_btn.font_scale = 0.55
+        windowed_btn.on_click = lambda obj: self.set_window_mode("windowed")
+        items.append(windowed_btn)
+
+        fullscreen_btn = Button(270, 35, 250, 40, "Fullscreen Mode", "fullscreen_btn")
+        fullscreen_btn.background_color = (70, 130, 180) if self.window_mode == "fullscreen" else (55, 55, 62)
+        fullscreen_btn.font_scale = 0.55
+        fullscreen_btn.on_click = lambda obj: self.set_window_mode("fullscreen")
+        items.append(fullscreen_btn)
+
+        # 分辨率标签
+        res_label = Label(10, 90, 510, 20, "Resolution (Windowed Mode Only):", "res_label")
+        res_label.text_color = (200, 200, 200)
+        res_label.background_color = (45, 45, 52)
+        res_label.font_scale = 0.45
+        res_label.font_thickness = 1
+        res_label.align = "left"
+        items.append(res_label)
+
+        # 当前分辨率显示
+        current_res_name, current_res = self.available_resolutions[self.current_resolution_index]
+        current_label = Label(10, 115, 510, 30, f"Current: {current_res_name}", "current_res")
+        current_label.text_color = (100, 200, 255)
+        current_label.background_color = (45, 45, 52)
+        current_label.font_scale = 0.5
+        current_label.font_thickness = 2
+        current_label.align = "center"
+        items.append(current_label)
+
+        # 分辨率选择按钮（每行2个，间距更合理）
+        y_offset = 155
+        for idx, (name, res) in enumerate(self.available_resolutions):
+            col = idx % 2
+            row = idx // 2
+            x = 10 + col * 260  # 增加间距
+            y = y_offset + row * 45
+
+            btn = Button(x, y, 250, 38, name.split()[0], f"res_btn_{idx}")
+            btn.font_scale = 0.5
+
+            # 窗口模式下才可用
+            if self.window_mode == "windowed":
+                if idx == self.current_resolution_index:
+                    btn.background_color = (70, 130, 180)
+                else:
+                    btn.background_color = (60, 60, 67)
+                    btn.hover_color = (80, 80, 87)
+                btn.enabled = True
+            else:
+                btn.background_color = (40, 40, 45)
+                btn.enabled = False
+
+            btn.on_click = lambda obj, i=idx: self.set_resolution(i)
+            items.append(btn)
+
+        return items
+
+    def set_window_mode(self, mode: str):
+        """设置窗口模式"""
+        self.window_mode = mode
+
+        if mode == "fullscreen":
+            # 保存当前窗口大小
+            self.saved_width = self.width
+            self.saved_height = self.height
+
+            # 切换到全屏
+            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+
+            # 获取屏幕分辨率
+            import tkinter as tk
+            root_tk = tk.Tk()
+            self.width = root_tk.winfo_screenwidth()
+            self.height = root_tk.winfo_screenheight()
+            root_tk.destroy()
+
+            # 更新 root 大小
+            self.root.width = self.width
+            self.root.height = self.height
+
+        else:
+            # 切换回窗口模式
+            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
+
+            # 恢复之前的窗口大小
+            if hasattr(self, 'saved_width'):
+                self.width = self.saved_width
+                self.height = self.saved_height
+
+            cv2.resizeWindow(self.window_name, self.width, self.height)
+
+            # 更新 root 大小
+            self.root.width = self.width
+            self.root.height = self.height
+
+        # 更新信息标签位置
+        info_width = 300
+        info_height = 60
+        self.info_label.x = self.width - info_width - 20
+        self.info_label.y = self.height - info_height - 20
+
+        self.refresh_current_tab()
+
+    def set_resolution(self, index: int):
+        """设置分辨率"""
+        if self.window_mode != "windowed":
+            return
+
+        self.current_resolution_index = index
+        res_name, (new_width, new_height) = self.available_resolutions[index]
+
+        # 更新窗口大小
+        self.width = new_width
+        self.height = new_height
+
+        # 更新 root 大小
+        self.root.width = self.width
+        self.root.height = self.height
+
+        # 调整窗口
+        cv2.resizeWindow(self.window_name, self.width, self.height)
+
+        # 更新信息标签位置
+        info_width = 300
+        info_height = 60
+        self.info_label.x = self.width - info_width - 20
+        self.info_label.y = self.height - info_height - 20
+
+        print(f"[Display] Resolution changed to {res_name}")
+        self.refresh_current_tab()
+
 
     def _create_param_label(self, x: int, y: int, text: str):
         """创建参数标签"""
-        label = Label(x, y, 380, 25, text, f"param_{text[:10]}")
+        label = Label(x, y, 510, 25, text, f"param_{text[:10]}")
         label.text_color = (240, 240, 245)  # 更亮的浅色
         label.background_color = (45, 45, 52)  # 与面板背景一致
         label.font_scale = 0.5
@@ -656,8 +819,9 @@ class PIPLinkApp:
 
     def run(self):
         """主循环"""
-        cv2.namedWindow(self.window_name)
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.window_name, self.width, self.height)
+        cv2.setWindowProperty(self.window_name, cv2.WND_PROP_AUTOSIZE, cv2.WINDOW_AUTOSIZE)  # 禁止手动调整
         cv2.setMouseCallback(self.window_name, self.mouse_callback)
 
         last_time = time.time()
@@ -667,6 +831,9 @@ class PIPLinkApp:
         print("Press ESC to toggle debug panel")
 
         while True:
+            """主循环"""
+            cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+            cv2.resizeWindow(self.window_name, self.width, self.height)
             current_time = time.time()
             dt = current_time - last_time
             last_time = current_time
