@@ -3,12 +3,13 @@ import cv2
 import time
 import threading
 from ui_components.base_object import Object
-from ui_components.panel import Panel
 from ui_components.label import Label
 from ui_components.textbox import TextBox
 from ui_components.button import Button
+from ui_components.tabbed_panel import TabbedPanel
 from web_conn.tcp_conn import TCPConnection
 from web_conn.udp_conn import UDPReceiver
+from web_conn.params_receiver import ParamsReceiver
 
 
 class PIPLinkApp:
@@ -21,15 +22,19 @@ class PIPLinkApp:
         self.server_ip = ""
         self.server_port = ""
         self.is_connected = False
-        self.udp_port = 9999  # 默认值
+        self.udp_port = 9999  # 视频流 UDP 端口 = TCP端口 + 1
+        self.params_port = 10000  # 参数 UDP 端口 = TCP端口 + 2
 
         # TCP 连接管理器
         self.tcp_conn = TCPConnection(timeout=5)
-        self.tcp_conn.udp_port = self.udp_port  # 设置 UDP 端口
+        self.tcp_conn.udp_port = self.udp_port
         self.setup_tcp_callbacks()
 
         # UDP 接收器
         self.udp_receiver = None
+
+        # 参数接收器
+        self.params_receiver = None
 
         # UI 可见性控制
         self.debug_panel_visible = True
@@ -38,9 +43,22 @@ class PIPLinkApp:
         self.video_frame = None
         self.video_frame_lock = threading.Lock()
 
+        # 服务端参数
+        self.server_params = None
+        self.server_params_lock = threading.Lock()
+
+        # 统计信息
+        self.frames_received = 0
+        self.latency_ms = 0.0
+        self.last_param_time = 0
+
         # 连接状态更新计时器
         self.status_update_timer = 0
-        self.status_update_interval = 0.5  # 每 0.5 秒更新一次状态显示
+        self.status_update_interval = 0.5
+
+        # UI 组件引用（避免重复创建）
+        self.conn_status_label = None
+        self.conn_duration_label = None
 
         # 初始化UI
         self.setup_ui()
@@ -51,93 +69,26 @@ class PIPLinkApp:
         self.root = Object(0, 0, self.width, self.height, "root")
         self.root.background_color = (30, 30, 30)
 
-        # ===== 左上角调试面板 =====
-        panel_width = 360
-        panel_height = 360
+        # ===== 选项卡式调试面板 =====
+        panel_width = 420
+        panel_height = 400
 
-        self.debug_panel = Panel(20, 20, panel_width, panel_height, "debug_panel")
-        self.debug_panel.title = "Connection & Debug"
-        self.debug_panel.background_color = (50, 50, 55)
-        self.debug_panel.alpha = 0.95
-        self.debug_panel.title_color = (70, 130, 180)
-        self.debug_panel.border_color = (70, 130, 180)
-        self.debug_panel.border_width = 2
+        self.debug_panel = TabbedPanel(20, 20, panel_width, panel_height, "debug_panel")
         self.root.add_child(self.debug_panel)
 
-        # 连接状态指示器
-        self.connection_status = Label(20, 50, 320, 25, "Status: Disconnected", "status_indicator")
-        self.connection_status.text_color = (255, 100, 100)
-        self.connection_status.font_scale = 0.5
-        self.connection_status.font_thickness = 2
-        self.connection_status.background_color = (50, 50, 55)
-        self.connection_status.align = "left"
-        self.debug_panel.add_child(self.connection_status)
-
-        # 连接时长标签
-        self.connection_duration = Label(20, 80, 320, 20, "Duration: --:--:--", "duration_label")
-        self.connection_duration.text_color = (200, 200, 200)
-        self.connection_duration.font_scale = 0.45
-        self.connection_duration.background_color = (50, 50, 55)
-        self.connection_duration.align = "left"
-        self.debug_panel.add_child(self.connection_duration)
-
-        # IP地址标签
-        ip_label = Label(20, 105, 320, 20, "Server IP:", "ip_label")
-        ip_label.text_color = (200, 200, 200)
-        ip_label.font_scale = 0.45
-        ip_label.background_color = (50, 50, 55)
-        ip_label.align = "left"
-        self.debug_panel.add_child(ip_label)
-
-        # IP地址输入框
-        self.ip_textbox = TextBox(20, 130, 320, 36, "ip_textbox")
-        self.ip_textbox.placeholder = "192.168.1.100"
-        self.ip_textbox.max_length = 15
-        self.ip_textbox.font_scale = 0.5
-        self.ip_textbox.on_text_change = self.on_ip_change
-        self.debug_panel.add_child(self.ip_textbox)
-
-        # 端口号标签
-        port_label = Label(20, 175, 320, 20, "Port:", "port_label")
-        port_label.text_color = (200, 200, 200)
-        port_label.font_scale = 0.45
-        port_label.background_color = (50, 50, 55)
-        port_label.align = "left"
-        self.debug_panel.add_child(port_label)
-
-        # 端口号输入框
-        self.port_textbox = TextBox(20, 200, 320, 36, "port_textbox")
-        self.port_textbox.placeholder = "8888"
-        self.port_textbox.max_length = 5
-        self.port_textbox.font_scale = 0.5
-        self.port_textbox.on_text_change = self.on_port_change
-        self.debug_panel.add_child(self.port_textbox)
-
-        # 连接/断开按钮
-        self.connect_button = Button(20, 250, 320, 40, "Connect", "connect_btn")
-        self.connect_button.background_color = (70, 130, 180)
-        self.connect_button.hover_color = (90, 150, 200)
-        self.connect_button.pressed_color = (50, 110, 160)
-        self.connect_button.font_scale = 0.6
-        self.connect_button.on_click = self.on_connect_click
-        self.debug_panel.add_child(self.connect_button)
-
-        # 提示信息标签
-        self.hint_label = Label(20, 300, 320, 50, "Press ESC to toggle\nDebug Panel", "hint_label")
-        self.hint_label.text_color = (150, 150, 150)
-        self.hint_label.font_scale = 0.4
-        self.hint_label.align = "center"
-        self.hint_label.valign = "center"
-        self.hint_label.background_color = (50, 50, 55)
-        self.debug_panel.add_child(self.hint_label)
+        # 添加选项卡
+        self.debug_panel.add_tab("Connection", self.build_connection_tab)
+        self.debug_panel.add_tab("Stream", self.build_stream_tab)
+        self.debug_panel.add_tab("Clients", self.build_clients_tab)
+        self.debug_panel.add_tab("Statistics", self.build_statistics_tab)
 
         # ===== 右下角信息显示 =====
         info_width = 300
-        info_height = 80
+        info_height = 60
         self.info_label = Label(self.width - info_width - 20, self.height - info_height - 20,
-                                info_width, info_height, "No video stream", "info_display")
+                                info_width, info_height, "Press ESC to toggle Debug Panel", "info_display")
         self.info_label.text_color = (150, 150, 150)
-        self.info_label.font_scale = 0.45
+        self.info_label.font_scale = 0.4
         self.info_label.align = "center"
         self.info_label.valign = "center"
         self.info_label.background_color = (40, 40, 45)
@@ -146,6 +97,235 @@ class PIPLinkApp:
         self.info_label.border_width = 1
         self.root.add_child(self.info_label)
 
+    # ===== 选项卡内容构建函数 =====
+
+    def build_connection_tab(self):
+        """构建连接选项卡"""
+        items = []
+
+        # 连接状态（只创建一次）
+        if self.conn_status_label is None:
+            self.conn_status_label = Label(10, 10, 380, 25, "Status: Disconnected", "conn_status")
+            self.conn_status_label.text_color = (255, 100, 100)
+            self.conn_status_label.background_color = (45, 45, 52)
+            self.conn_status_label.font_scale = 0.5
+            self.conn_status_label.font_thickness = 2
+            self.conn_status_label.align = "left"
+        items.append(self.conn_status_label)
+
+        # 连接时长（只创建一次）
+        if self.conn_duration_label is None:
+            self.conn_duration_label = Label(10, 40, 380, 20, "Duration: --:--:--", "conn_duration")
+            self.conn_duration_label.text_color = (200, 200, 200)
+            self.conn_duration_label.background_color = (45, 45, 52)
+            self.conn_duration_label.font_scale = 0.45
+            self.conn_duration_label.font_thickness = 1
+            self.conn_duration_label.align = "left"
+        items.append(self.conn_duration_label)
+
+        # IP 标签
+        ip_label = Label(10, 70, 380, 20, "Server IP:", "ip_label")
+        ip_label.text_color = (200, 200, 200)
+        ip_label.background_color = (45, 45, 52)
+        ip_label.font_scale = 0.45
+        ip_label.font_thickness = 1
+        ip_label.align = "left"
+        items.append(ip_label)
+
+        # IP 输入框
+        self.ip_textbox = TextBox(10, 95, 380, 36, "ip_textbox")
+        self.ip_textbox.placeholder = "192.168.1.100"
+        self.ip_textbox.max_length = 15
+        self.ip_textbox.font_scale = 0.5
+        self.ip_textbox.on_text_change = self.on_ip_change
+        items.append(self.ip_textbox)
+
+        # 端口标签
+        port_label = Label(10, 140, 380, 20, "Port:", "port_label")
+        port_label.text_color = (200, 200, 200)
+        port_label.background_color = (45, 45, 52)
+        port_label.font_scale = 0.45
+        port_label.font_thickness = 1
+        port_label.align = "left"
+        items.append(port_label)
+
+        # 端口输入框
+        self.port_textbox = TextBox(10, 165, 380, 36, "port_textbox")
+        self.port_textbox.placeholder = "8888"
+        self.port_textbox.max_length = 5
+        self.port_textbox.font_scale = 0.5
+        self.port_textbox.on_text_change = self.on_port_change
+        items.append(self.port_textbox)
+
+        # 连接按钮
+        self.connect_button = Button(10, 215, 380, 40, "Connect", "connect_btn")
+        self.connect_button.background_color = (70, 130, 180)
+        self.connect_button.hover_color = (90, 150, 200)
+        self.connect_button.pressed_color = (50, 110, 160)
+        self.connect_button.font_scale = 0.6
+        self.connect_button.on_click = self.on_connect_click
+        items.append(self.connect_button)
+
+        return items
+
+    def build_stream_tab(self):
+        """构建流参数选项卡"""
+        items = []
+
+        # 检查是否有服务端参数
+        with self.server_params_lock:
+            if self.server_params:
+                stream, _ = self.server_params
+
+                items.append(
+                    self._create_param_label(10, 10, f"Resolution: {stream.resolution_w}x{stream.resolution_h}"))
+                items.append(self._create_param_label(10, 40, f"JPEG Quality: {stream.jpeg_quality}%"))
+                items.append(self._create_param_label(10, 70, f"Frame Scale: {stream.frame_scale:.0%}"))
+                items.append(self._create_param_label(10, 100, f"Target FPS: {stream.target_fps}"))
+                items.append(self._create_param_label(10, 130, f"Actual FPS: {stream.actual_fps:.1f}"))
+            else:
+                label = Label(10, 10, 380, 25, "No stream parameters received", "no_params")
+                label.text_color = (150, 150, 150)
+                label.background_color = (45, 45, 52)
+                label.font_scale = 0.5
+                label.font_thickness = 1
+                label.align = "left"
+                items.append(label)
+
+        return items
+
+    def build_clients_tab(self):
+        """构建客户端列表选项卡"""
+        items = []
+
+        with self.server_params_lock:
+            if self.server_params:
+                _, clients = self.server_params
+
+                if clients:
+                    y_offset = 10
+                    for idx, client in enumerate(clients, 1):
+                        # 客户端标题
+                        title = Label(10, y_offset, 380, 25, f"Client #{idx} (ID {client.client_id})",
+                                      f"client_{idx}_title")
+                        title.text_color = (100, 200, 255)
+                        title.background_color = (45, 45, 52)
+                        title.font_scale = 0.5
+                        title.font_thickness = 2
+                        title.align = "left"
+                        items.append(title)
+                        y_offset += 30
+
+                        # TCP 信息
+                        tcp_info = Label(20, y_offset, 360, 20, f"TCP: {client.ip}:{client.tcp_port}",
+                                         f"client_{idx}_tcp")
+                        tcp_info.text_color = (220, 220, 225)
+                        tcp_info.background_color = (45, 45, 52)
+                        tcp_info.font_scale = 0.45
+                        tcp_info.font_thickness = 1
+                        tcp_info.align = "left"
+                        items.append(tcp_info)
+                        y_offset += 25
+
+                        # UDP 信息
+                        udp_info = Label(20, y_offset, 360, 20, f"UDP: :{client.udp_port}", f"client_{idx}_udp")
+                        udp_info.text_color = (220, 220, 225)
+                        udp_info.background_color = (45, 45, 52)
+                        udp_info.font_scale = 0.45
+                        udp_info.font_thickness = 1
+                        udp_info.align = "left"
+                        items.append(udp_info)
+                        y_offset += 25
+
+                        # 连接时间
+                        time_info = Label(20, y_offset, 360, 20, f"Connected: {client.connected_time}",
+                                          f"client_{idx}_time")
+                        time_info.text_color = (150, 150, 155)
+                        time_info.background_color = (45, 45, 52)
+                        time_info.font_scale = 0.4
+                        time_info.font_thickness = 1
+                        time_info.align = "left"
+                        items.append(time_info)
+                        y_offset += 35
+                else:
+                    label = Label(10, 10, 380, 25, "No clients connected", "no_clients")
+                    label.text_color = (150, 150, 150)
+                    label.background_color = (45, 45, 52)
+                    label.font_scale = 0.5
+                    label.font_thickness = 1
+                    label.align = "left"
+                    items.append(label)
+            else:
+                label = Label(10, 10, 380, 25, "No client data available", "no_data")
+                label.text_color = (150, 150, 150)
+                label.background_color = (45, 45, 52)
+                label.font_scale = 0.5
+                label.font_thickness = 1
+                label.align = "left"
+                items.append(label)
+
+        return items
+
+    def build_statistics_tab(self):
+        """构建统计信息选项卡"""
+        items = []
+
+        # 接收帧数
+        frames_label = Label(10, 10, 380, 25, f"Frames Received: {self.frames_received}", "frames_label")
+        frames_label.text_color = (240, 240, 245)
+        frames_label.background_color = (45, 45, 52)
+        frames_label.font_scale = 0.5
+        frames_label.font_thickness = 2
+        frames_label.align = "left"
+        items.append(frames_label)
+
+        # 延迟
+        latency_label = Label(10, 40, 380, 25, f"Network Latency: {self.latency_ms:.1f} ms", "latency_label")
+        latency_label.text_color = (240, 240, 245)
+        latency_label.background_color = (45, 45, 52)
+        latency_label.font_scale = 0.5
+        latency_label.font_thickness = 2
+        latency_label.align = "left"
+        items.append(latency_label)
+
+        # 延迟状态
+        latency_status = "Excellent" if self.latency_ms < 20 else "Good" if self.latency_ms < 50 else "Poor"
+        latency_color = (100, 255, 100) if self.latency_ms < 20 else (220, 180, 50) if self.latency_ms < 50 else (255,
+                                                                                                                  100,
+                                                                                                                  100)
+
+        status_label = Label(10, 70, 380, 25, f"Latency Status: {latency_status}", "latency_status")
+        status_label.text_color = latency_color
+        status_label.background_color = (45, 45, 52)
+        status_label.font_scale = 0.5
+        status_label.font_thickness = 2
+        status_label.align = "left"
+        items.append(status_label)
+
+        # 参数更新时间
+        time_since_update = time.time() - self.last_param_time if self.last_param_time > 0 else 999
+        update_text = f"Last Update: {time_since_update:.1f}s ago" if time_since_update < 10 else "No recent updates"
+
+        update_label = Label(10, 100, 380, 25, update_text, "last_update")
+        update_label.text_color = (200, 200, 205)
+        update_label.background_color = (45, 45, 52)
+        update_label.font_scale = 0.45
+        update_label.font_thickness = 1
+        update_label.align = "left"
+        items.append(update_label)
+
+        return items
+
+    def _create_param_label(self, x: int, y: int, text: str):
+        """创建参数标签"""
+        label = Label(x, y, 380, 25, text, f"param_{text[:10]}")
+        label.text_color = (240, 240, 245)  # 更亮的浅色
+        label.background_color = (45, 45, 52)  # 与面板背景一致
+        label.font_scale = 0.5
+        label.font_thickness = 2  # 加粗
+        label.align = "left"
+        return label
+
     def on_ip_change(self, obj):
         """IP输入变化回调"""
         self.server_ip = obj.text
@@ -153,15 +333,16 @@ class PIPLinkApp:
     def on_port_change(self, obj):
         """端口输入变化回调"""
         self.server_port = obj.text
-        # 自动计算 UDP 端口 = TCP 端口 + 1
         try:
             tcp_port = int(obj.text) if obj.text else 8888
-            self.udp_port = tcp_port + 1
+            self.udp_port = tcp_port + 1  # 视频流端口 = TCP + 1
+            self.params_port = tcp_port + 2  # 参数端口 = TCP + 2
             self.tcp_conn.udp_port = self.udp_port
-            print(f"[INFO] TCP Port: {tcp_port}, UDP Port: {self.udp_port}")
+            print(f"[INFO] TCP Port: {tcp_port}, UDP Port: {self.udp_port}, Params Port: {self.params_port}")
         except ValueError:
-            self.udp_port = 8889
-            self.tcp_conn.udp_port = 8889
+            self.udp_port = 9999
+            self.params_port = 10000
+            self.tcp_conn.udp_port = 9999
 
     def setup_tcp_callbacks(self):
         """设置TCP连接的回调函数"""
@@ -174,86 +355,104 @@ class PIPLinkApp:
 
     def on_tcp_connecting(self):
         """TCP开始连接"""
-        self.connection_status.text = "Status: Connecting..."
-        self.connection_status.text_color = (255, 200, 100)
+        if self.conn_status_label:
+            self.conn_status_label.text = "Status: Connecting..."
+            self.conn_status_label.text_color = (255, 200, 100)
 
     def on_tcp_success(self):
         """TCP连接成功"""
         self.is_connected = True
         self.connect_button.text = "Disconnect"
         self.connect_button.background_color = (180, 70, 70)
-        self.connection_status.text = "Status: Connected (TCP OK)"
-        self.connection_status.text_color = (100, 255, 100)
-        self.info_label.text = f"TCP handshake completed\n{self.server_ip}:{self.server_port}\nReady for UDP communication"
+
+        if self.conn_status_label:
+            self.conn_status_label.text = "Status: Connected"
+            self.conn_status_label.text_color = (100, 255, 100)
+
+        self.info_label.text = f"Connected to {self.server_ip}:{self.server_port}"
 
         # 启动 UDP 接收器
         self.start_udp_receiver()
 
+        # 启动参数接收器
+        self.start_params_receiver()
+
     def on_tcp_timeout(self):
         """TCP连接超时"""
-        self.connection_status.text = "Status: Connection Timeout"
-        self.connection_status.text_color = (255, 100, 100)
-        self.info_label.text = "Connection timeout\nCheck IP/Port and network"
+        if self.conn_status_label:
+            self.conn_status_label.text = "Status: Connection Timeout"
+            self.conn_status_label.text_color = (255, 100, 100)
+        self.info_label.text = "Connection timeout"
         self.stop_udp_receiver()
+        self.stop_params_receiver()
 
     def on_tcp_refused(self):
         """TCP连接被拒绝"""
-        self.connection_status.text = "Status: Connection Refused"
-        self.connection_status.text_color = (255, 100, 100)
-        self.info_label.text = "Connection refused\nServer may not be running"
+        if self.conn_status_label:
+            self.conn_status_label.text = "Status: Connection Refused"
+            self.conn_status_label.text_color = (255, 100, 100)
+        self.info_label.text = "Connection refused"
 
     def on_tcp_error(self, error: Exception):
         """TCP连接错误"""
-        self.connection_status.text = f"Status: Error - {type(error).__name__}"
-        self.connection_status.text_color = (255, 100, 100)
-        self.info_label.text = f"Connection failed\n{str(error)}"
+        if self.conn_status_label:
+            self.conn_status_label.text = f"Status: Error"
+            self.conn_status_label.text_color = (255, 100, 100)
+        self.info_label.text = f"Connection failed: {type(error).__name__}"
 
     def on_tcp_disconnected(self):
         """TCP连接断开"""
         self.is_connected = False
         self.connect_button.text = "Connect"
         self.connect_button.background_color = (70, 130, 180)
-        self.connection_status.text = "Status: Disconnected"
-        self.connection_status.text_color = (255, 100, 100)
-        self.connection_duration.text = "Duration: --:--:--"
+
+        if self.conn_status_label:
+            self.conn_status_label.text = "Status: Disconnected"
+            self.conn_status_label.text_color = (255, 100, 100)
+
+        if self.conn_duration_label:
+            self.conn_duration_label.text = "Duration: --:--:--"
+
         self.info_label.text = "Connection lost"
-        # TCP断开时停止UDP接收
         self.stop_udp_receiver()
-        print("[INFO] TCP connection lost, UDP receiver stopped")
+        self.stop_params_receiver()
 
     def on_connect_click(self, obj):
         """连接按钮点击回调"""
         if self.is_connected:
-            # 断开连接
             self.is_connected = False
             self.tcp_conn.disconnect()
             self.stop_udp_receiver()
+            self.stop_params_receiver()
             self.connect_button.text = "Connect"
             self.connect_button.background_color = (70, 130, 180)
-            self.connection_status.text = "Status: Disconnected"
-            self.connection_status.text_color = (255, 100, 100)
-            self.connection_duration.text = "Duration: --:--:--"
-            self.info_label.text = "Connection closed by user"
-            print("[INFO] Connection closed by user")
+
+            if self.conn_status_label:
+                self.conn_status_label.text = "Status: Disconnected"
+                self.conn_status_label.text_color = (255, 100, 100)
+
+            if self.conn_duration_label:
+                self.conn_duration_label.text = "Duration: --:--:--"
+
+            self.info_label.text = "Disconnected by user"
             return
 
-        # 验证输入
         if not self.server_ip or not self.server_port:
-            self.connection_status.text = "Status: Missing IP or Port"
-            self.connection_status.text_color = (255, 150, 50)
+            if self.conn_status_label:
+                self.conn_status_label.text = "Status: Missing IP or Port"
+                self.conn_status_label.text_color = (255, 150, 50)
             return
 
-        # 验证端口号格式
         try:
             port_num = int(self.server_port)
             if port_num < 1 or port_num > 65535:
                 raise ValueError
         except ValueError:
-            self.connection_status.text = "Status: Invalid Port (1-65535)"
-            self.connection_status.text_color = (255, 150, 50)
+            if self.conn_status_label:
+                self.conn_status_label.text = "Status: Invalid Port"
+                self.conn_status_label.text_color = (255, 150, 50)
             return
 
-        # 发起TCP握手
         self.tcp_conn.handshake(self.server_ip, port_num, async_mode=True)
 
     def start_udp_receiver(self):
@@ -262,19 +461,64 @@ class PIPLinkApp:
             self.udp_receiver = UDPReceiver(self.udp_port)
             self.udp_receiver.on_frame_received = self.on_udp_frame_received
             self.udp_receiver.start()
-            print(f"[INFO] UDP receiver started on port {self.udp_port}")
 
     def stop_udp_receiver(self):
         """停止 UDP 接收器"""
         if self.udp_receiver:
             self.udp_receiver.stop()
             self.udp_receiver = None
-            print("[INFO] UDP receiver stopped")
+
+    def start_params_receiver(self):
+        """启动参数接收器"""
+        if self.params_receiver is None:
+            self.params_receiver = ParamsReceiver(self.params_port)
+            self.params_receiver.on_params_received = self.on_params_received
+            self.params_receiver.start()
+            print(f"[INFO] Params receiver started on port {self.params_port}")
+
+    def stop_params_receiver(self):
+        """停止参数接收器"""
+        if self.params_receiver:
+            self.params_receiver.stop()
+            self.params_receiver = None
 
     def on_udp_frame_received(self, frame: np.ndarray):
         """UDP 帧接收回调"""
         with self.video_frame_lock:
             self.video_frame = frame.copy()
+            self.frames_received += 1
+
+    def on_params_received(self, stream_params, clients):
+        """参数接收回调"""
+        receive_time = time.time()  # 立即记录接收时间
+
+        with self.server_params_lock:
+            self.server_params = (stream_params, clients)
+
+            # 计算延迟（使用单调时钟更精确）
+            if stream_params.timestamp > 0:
+                # 计算延迟：接收时间 - 发送时间
+                latency = receive_time - stream_params.timestamp
+
+                # 只有当延迟为正数且合理（< 5秒）时才更新
+                if 0 < latency < 5.0:
+                    self.latency_ms = latency * 1000
+                else:
+                    # 时间戳异常，可能是时钟不同步
+                    if latency < 0:
+                        print(
+                            f"[WARNING] Negative latency detected: {latency * 1000:.1f}ms - clocks may not be synchronized")
+                    self.latency_ms = 0.0
+
+            self.last_param_time = receive_time
+
+        # 刷新当前选项卡内容
+        self.refresh_current_tab()
+
+    def refresh_current_tab(self):
+        """刷新当前选项卡的内容"""
+        if self.debug_panel.visible:
+            self.debug_panel._rebuild_content()
 
     def toggle_debug_panel(self):
         """切换调试面板的可见性"""
@@ -297,47 +541,42 @@ class PIPLinkApp:
         print(f"Window Size: {self.width}x{self.height}")
         print("Press ESC to toggle debug panel")
 
-        frame_count = 0
-
         while True:
             current_time = time.time()
             dt = current_time - last_time
             last_time = current_time
 
-            # 更新连接时长显示
+            # 更新连接时长
             self.status_update_timer += dt
             if self.status_update_timer >= self.status_update_interval:
-                if self.is_connected:
+                if self.is_connected and self.conn_duration_label:
                     duration_str = self.tcp_conn.get_connection_time_str()
-                    self.connection_duration.text = f"Duration: {duration_str}"
+                    self.conn_duration_label.text = f"Duration: {duration_str}"
                 self.status_update_timer = 0
 
-            # 创建画布 - 直接用视频流作为背景
+            # 创建画布
             if self.video_frame is not None:
                 with self.video_frame_lock:
                     frame = self.video_frame.copy()
 
-                # 缩放视频帧以适应窗口
                 frame_h, frame_w = frame.shape[:2]
                 scale = min(self.width / frame_w, self.height / frame_h)
                 new_w = int(frame_w * scale)
                 new_h = int(frame_h * scale)
                 resized = cv2.resize(frame, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
 
-                # 创建画布并填充视频
                 canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 x_offset = (self.width - new_w) // 2
                 y_offset = (self.height - new_h) // 2
                 canvas[y_offset:y_offset + new_h, x_offset:x_offset + new_w] = resized
             else:
-                # 没有视频时显示灰色背景
                 canvas = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 canvas[:] = self.root.background_color
 
             # 更新UI
             self.root.update(dt)
 
-            # 绘制 UI 组件（调试面板等）
+            # 绘制 UI 组件
             self.root.draw(canvas)
 
             # 显示
@@ -346,8 +585,7 @@ class PIPLinkApp:
             # 按键处理
             key = cv2.waitKey(1) & 0xFF
 
-            # ESC键切换调试面板
-            if key == 27:
+            if key == 27:  # ESC
                 focused = Object.get_focused_object()
                 if focused and isinstance(focused, TextBox):
                     focused.is_focused = False
@@ -356,16 +594,15 @@ class PIPLinkApp:
                     self.toggle_debug_panel()
                 continue
 
-            # 让TextBox处理键盘输入
             if self.ip_textbox.handle_key(key) or self.port_textbox.handle_key(key):
                 continue
 
-            # 检查窗口是否关闭
             if cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1:
                 break
 
         # 清理
         self.stop_udp_receiver()
+        self.stop_params_receiver()
         cv2.destroyAllWindows()
 
 
