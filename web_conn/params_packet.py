@@ -20,6 +20,10 @@ class StreamParams:
     resolution_w: int
     resolution_h: int
     timestamp: float  # 服务端时间戳
+    # 新增图像调整参数
+    exposure: float = 1.0
+    contrast: float = 1.0
+    gamma: float = 1.0
 
 
 @dataclass
@@ -111,7 +115,10 @@ class ParamsPacket:
             frame_scale: float,
             target_fps: int,
             actual_fps: float,
-            resolution: tuple
+            resolution: tuple,
+            exposure: float = 1.0,
+            contrast: float = 1.0,
+            gamma: float = 1.0
     ) -> StreamParams:
         """创建流参数对象"""
         return StreamParams(
@@ -121,7 +128,10 @@ class ParamsPacket:
             actual_fps=actual_fps,
             resolution_w=resolution[0],
             resolution_h=resolution[1],
-            timestamp=time.time()
+            timestamp=time.time(),
+            exposure=exposure,
+            contrast=contrast,
+            gamma=gamma
         )
 
     @staticmethod

@@ -109,6 +109,25 @@ class PIPLinkApp:
         self.frame_scale_textbox.max_length = 4
         self.frame_scale_textbox.font_scale = 0.5
 
+        # 图像调整TextBox引用
+        self.exposure_textbox = TextBox(10, 225, 160, 36, "exposure_textbox")
+        self.exposure_textbox.text = "1.00"
+        self.exposure_textbox.placeholder = "1.0"
+        self.exposure_textbox.max_length = 4
+        self.exposure_textbox.font_scale = 0.5
+
+        self.contrast_textbox = TextBox(180, 225, 160, 36, "contrast_textbox")
+        self.contrast_textbox.text = "1.00"
+        self.contrast_textbox.placeholder = "1.0"
+        self.contrast_textbox.max_length = 4
+        self.contrast_textbox.font_scale = 0.5
+
+        self.gamma_textbox = TextBox(350, 225, 160, 36, "gamma_textbox")
+        self.gamma_textbox.text = "1.00"
+        self.gamma_textbox.placeholder = "1.0"
+        self.gamma_textbox.max_length = 4
+        self.gamma_textbox.font_scale = 0.5
+
         # 初始化UI
         self.setup_ui()
 
@@ -131,6 +150,7 @@ class PIPLinkApp:
         self.debug_panel.add_tab("Clients", self.build_clients_tab)
         self.debug_panel.add_tab("Statistics", self.build_statistics_tab)
         self.debug_panel.add_tab("Display", self.build_display_tab)  # 新增
+        self.debug_panel.add_tab("Image", self.build_image_tab)
 
         # ===== 右下角信息显示 =====
         info_width = 300
@@ -605,6 +625,114 @@ class PIPLinkApp:
 
         return items
 
+    def build_image_tab(self):
+        """构建图像调整选项卡"""
+        items = []
+
+        # 标题
+        title_label = Label(10, 10, 510, 25, "Image Adjustment", "image_title")
+        title_label.text_color = (100, 200, 255)
+        title_label.background_color = (45, 45, 52)
+        title_label.font_scale = 0.5
+        title_label.font_thickness = 2
+        title_label.align = "left"
+        items.append(title_label)
+
+        # 从服务端参数读取当前值
+        with self.server_params_lock:
+            if self.server_params:
+                stream, _ = self.server_params
+
+                # 读取服务端的图像调整参数
+                server_exposure = getattr(stream, 'exposure', 1.0)
+                server_contrast = getattr(stream, 'contrast', 1.0)
+                server_gamma = getattr(stream, 'gamma', 1.0)
+
+                # 当前值显示（从服务端获取）
+                current_label = Label(10, 45, 510, 60,
+                                      f"Server Values:\nExposure: {server_exposure:.2f}  |  Contrast: {server_contrast:.2f}  |  Gamma: {server_gamma:.2f}",
+                                      "current_values")
+                current_label.text_color = (100, 255, 100)  # 绿色表示来自服务端
+                current_label.background_color = (45, 45, 52)
+                current_label.font_scale = 0.45
+                current_label.align = "left"
+                items.append(current_label)
+
+                # 只在TextBox为空且未聚焦时，才从服务端同步默认值
+                if not self.exposure_textbox.is_focused and not self.exposure_textbox.text:
+                    self.exposure_textbox.text = f"{server_exposure:.2f}"
+                if not self.contrast_textbox.is_focused and not self.contrast_textbox.text:
+                    self.contrast_textbox.text = f"{server_contrast:.2f}"
+                if not self.gamma_textbox.is_focused and not self.gamma_textbox.text:
+                    self.gamma_textbox.text = f"{server_gamma:.2f}"
+            else:
+                # 无服务端数据时显示
+                current_label = Label(10, 45, 510, 60,
+                                      "No server data available\nConnect to server first",
+                                      "current_values")
+                current_label.text_color = (150, 150, 150)
+                current_label.background_color = (45, 45, 52)
+                current_label.font_scale = 0.45
+                current_label.align = "left"
+                items.append(current_label)
+
+        # 曝光度标签
+        exposure_label = Label(10, 115, 160, 20, "Exposure (0.1-3.0):", "exposure_label")
+        exposure_label.text_color = (200, 200, 200)
+        exposure_label.background_color = (45, 45, 52)
+        exposure_label.font_scale = 0.4
+        exposure_label.align = "left"
+        items.append(exposure_label)
+
+        # 对比度标签
+        contrast_label = Label(180, 115, 160, 20, "Contrast (0.1-3.0):", "contrast_label")
+        contrast_label.text_color = (200, 200, 200)
+        contrast_label.background_color = (45, 45, 52)
+        contrast_label.font_scale = 0.4
+        contrast_label.align = "left"
+        items.append(contrast_label)
+
+        # Gamma标签
+        gamma_label = Label(350, 115, 160, 20, "Gamma (0.1-3.0):", "gamma_label")
+        gamma_label.text_color = (200, 200, 200)
+        gamma_label.background_color = (45, 45, 52)
+        gamma_label.font_scale = 0.4
+        gamma_label.align = "left"
+        items.append(gamma_label)
+
+        # 输入框（保持现有逻辑）
+        items.append(self.exposure_textbox)
+        items.append(self.contrast_textbox)
+        items.append(self.gamma_textbox)
+
+        # 应用按钮
+        apply_btn = Button(10, 275, 490, 40, "Apply Image Adjustment", "apply_image_btn")
+        apply_btn.background_color = (70, 130, 180)
+        apply_btn.hover_color = (90, 150, 200)
+        apply_btn.font_scale = 0.55
+        apply_btn.on_click = self.on_apply_image_click
+        items.append(apply_btn)
+
+        # 重置按钮
+        reset_btn = Button(10, 325, 240, 40, "Reset to Default", "reset_image_btn")
+        reset_btn.background_color = (180, 130, 70)
+        reset_btn.hover_color = (200, 150, 90)
+        reset_btn.font_scale = 0.5
+        reset_btn.on_click = self.on_reset_image_click
+        items.append(reset_btn)
+
+        # 说明
+        info_label = Label(10, 380, 510, 80,
+                           "Tip: Increase exposure for dark images.\nAdjust contrast to enhance details.\nModify gamma for brightness curve.\n\nValues shown above are from ROS2 server.",
+                           "image_info")
+        info_label.text_color = (150, 150, 155)
+        info_label.background_color = (45, 45, 52)
+        info_label.font_scale = 0.4
+        info_label.align = "left"
+        items.append(info_label)
+
+        return items
+
     def set_window_mode(self, mode: str):
         """设置窗口模式"""
         self.window_mode = mode
@@ -768,7 +896,6 @@ class PIPLinkApp:
             self.conn_status_label.text_color = (255, 100, 100)
         self.info_label.text = f"Connection failed: {type(error).__name__}"
 
-
     def on_tcp_disconnected(self):
         """TCP连接断开"""
         self.is_connected = False
@@ -862,6 +989,73 @@ class PIPLinkApp:
             print(f"[Quality] 输入格式错误: {e}")
         except Exception as e:
             print(f"[Quality] 发送失败: {e}")
+
+    def on_apply_image_click(self, obj):
+        """应用图像调整按钮点击回调"""
+        if not self.is_connected:
+            print("[Image] 未连接到服务器")
+            self.info_label.text = "Not connected - cannot apply settings"
+            return
+
+        try:
+            # 读取输入值
+            exposure = float(self.exposure_textbox.text) if self.exposure_textbox.text else 1.0
+            contrast = float(self.contrast_textbox.text) if self.contrast_textbox.text else 1.0
+            gamma = float(self.gamma_textbox.text) if self.gamma_textbox.text else 1.0
+
+            # 验证范围
+            exposure = max(0.1, min(3.0, exposure))
+            contrast = max(0.1, min(3.0, contrast))
+            gamma = max(0.1, min(3.0, gamma))
+
+            # 发送到服务端
+            message = f"IMAGE_ADJUST:{exposure:.2f},{contrast:.2f},{gamma:.2f}"
+            self.tcp_conn.socket.send(message.encode('utf-8'))
+
+            print(f"[Image] 已发送: Exposure={exposure:.2f}, Contrast={contrast:.2f}, Gamma={gamma:.2f}")
+            self.info_label.text = f"Image adjustment sent:\nE={exposure:.2f} C={contrast:.2f} G={gamma:.2f}"
+
+            # 更新显示
+            self.exposure_textbox.text = f"{exposure:.2f}"
+            self.contrast_textbox.text = f"{contrast:.2f}"
+            self.gamma_textbox.text = f"{gamma:.2f}"
+
+            # 注意：不更新本地变量，等待服务端参数返回后自动更新显示
+
+            self.refresh_current_tab()
+
+        except ValueError as e:
+            print(f"[Image] Input format error: {e}")
+            self.info_label.text = "Invalid input format"
+        except Exception as e:
+            print(f"[Image] 发送失败: {e}")
+            self.info_label.text = f"Send failed: {e}"
+
+    def on_reset_image_click(self, obj):
+        """重置图像调整按钮点击回调"""
+        if not self.is_connected:
+            print("[Image] 未连接到服务器")
+            self.info_label.text = "Not connected - cannot reset"
+            return
+
+        try:
+            # 发送重置命令到服务端
+            message = "IMAGE_ADJUST:1.00,1.00,1.00"
+            self.tcp_conn.socket.send(message.encode('utf-8'))
+
+            print("[Image] 已发送重置命令")
+            self.info_label.text = "Image adjustment reset to default"
+
+            # 更新输入框显示
+            self.exposure_textbox.text = "1.00"
+            self.contrast_textbox.text = "1.00"
+            self.gamma_textbox.text = "1.00"
+
+            self.refresh_current_tab()
+
+        except Exception as e:
+            print(f"[Image] 重置失败: {e}")
+            self.info_label.text = f"Reset failed: {e}"
 
     def start_udp_receiver(self):
         """启动 UDP 接收器"""
@@ -1012,6 +1206,8 @@ class PIPLinkApp:
                 textboxes.append(self.jpeg_quality_textbox)
             if self.frame_scale_textbox:
                 textboxes.append(self.frame_scale_textbox)
+            # 添加图像调整TextBox
+            textboxes.extend([self.exposure_textbox, self.contrast_textbox, self.gamma_textbox])
 
             if any(tb.handle_key(key) for tb in textboxes):
                 continue
