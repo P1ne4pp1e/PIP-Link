@@ -75,6 +75,40 @@ class PIPLinkApp:
         self.conn_status_label = None
         self.conn_duration_label = None
 
+        # 连接TextBox引用（在初始化时创建）
+        self.ip_textbox = TextBox(10, 95, 510, 36, "ip_textbox")
+        self.ip_textbox.placeholder = "192.168.1.100"
+        self.ip_textbox.max_length = 15
+        self.ip_textbox.font_scale = 0.5
+        self.ip_textbox.on_text_change = self.on_ip_change
+
+        self.port_textbox = TextBox(10, 165, 510, 36, "port_textbox")
+        self.port_textbox.placeholder = "8888"
+        self.port_textbox.max_length = 5
+        self.port_textbox.font_scale = 0.5
+        self.port_textbox.on_text_change = self.on_port_change
+
+        # ===== 新增：连接按钮也只创建一次 =====
+        self.connect_button = Button(10, 215, 510, 40, "Connect", "connect_btn")
+        self.connect_button.background_color = (70, 130, 180)
+        self.connect_button.hover_color = (90, 150, 200)
+        self.connect_button.pressed_color = (50, 110, 160)
+        self.connect_button.font_scale = 0.6
+        self.connect_button.on_click = self.on_connect_click
+
+        # 质量控制TextBox引用（在初始化时创建，避免重复创建）
+        self.jpeg_quality_textbox = TextBox(10, 225, 240, 36, "jpeg_quality_textbox")
+        self.jpeg_quality_textbox.text = "80"  # 默认值
+        self.jpeg_quality_textbox.placeholder = "80"
+        self.jpeg_quality_textbox.max_length = 3
+        self.jpeg_quality_textbox.font_scale = 0.5
+
+        self.frame_scale_textbox = TextBox(260, 225, 240, 36, "frame_scale_textbox")
+        self.frame_scale_textbox.text = "1.00"  # 默认值
+        self.frame_scale_textbox.placeholder = "1.0"
+        self.frame_scale_textbox.max_length = 4
+        self.frame_scale_textbox.font_scale = 0.5
+
         # 初始化UI
         self.setup_ui()
 
@@ -148,12 +182,7 @@ class PIPLinkApp:
         ip_label.align = "left"
         items.append(ip_label)
 
-        # IP 输入框
-        self.ip_textbox = TextBox(10, 95, 510, 36, "ip_textbox")
-        self.ip_textbox.placeholder = "192.168.1.100"
-        self.ip_textbox.max_length = 15
-        self.ip_textbox.font_scale = 0.5
-        self.ip_textbox.on_text_change = self.on_ip_change
+        # IP 输入框（复用实例）
         items.append(self.ip_textbox)
 
         # 端口标签
@@ -165,21 +194,21 @@ class PIPLinkApp:
         port_label.align = "left"
         items.append(port_label)
 
-        # 端口输入框
-        self.port_textbox = TextBox(10, 165, 510, 36, "port_textbox")
-        self.port_textbox.placeholder = "8888"
-        self.port_textbox.max_length = 5
-        self.port_textbox.font_scale = 0.5
-        self.port_textbox.on_text_change = self.on_port_change
+        # 端口输入框（复用实例）
         items.append(self.port_textbox)
 
-        # 连接按钮
-        self.connect_button = Button(10, 215, 510, 40, "Connect", "connect_btn")
-        self.connect_button.background_color = (70, 130, 180)
-        self.connect_button.hover_color = (90, 150, 200)
-        self.connect_button.pressed_color = (50, 110, 160)
-        self.connect_button.font_scale = 0.6
-        self.connect_button.on_click = self.on_connect_click
+        # ===== 修改：复用连接按钮实例，只更新文本和颜色 =====
+        if self.is_connected:
+            self.connect_button.text = "Disconnect"
+            self.connect_button.background_color = (180, 70, 70)
+            self.connect_button.hover_color = (200, 90, 90)
+            self.connect_button.pressed_color = (160, 50, 50)
+        else:
+            self.connect_button.text = "Connect"
+            self.connect_button.background_color = (70, 130, 180)
+            self.connect_button.hover_color = (90, 150, 200)
+            self.connect_button.pressed_color = (50, 110, 160)
+
         items.append(self.connect_button)
 
         return items
@@ -199,6 +228,53 @@ class PIPLinkApp:
                 items.append(self._create_param_label(10, 70, f"Frame Scale: {stream.frame_scale:.0%}"))
                 items.append(self._create_param_label(10, 100, f"Target FPS: {stream.target_fps}"))
                 items.append(self._create_param_label(10, 130, f"Actual FPS: {stream.actual_fps:.1f}"))
+
+                # ===== 质量控制区域 =====
+                control_label = Label(10, 170, 510, 20, "Quality Control:", "control_label")
+                control_label.text_color = (100, 200, 255)
+                control_label.background_color = (45, 45, 52)
+                control_label.font_scale = 0.5
+                control_label.font_thickness = 2
+                control_label.align = "left"
+                items.append(control_label)
+
+                # JPEG质量标签
+                jpeg_label = Label(10, 200, 510, 20, "JPEG Quality (1-100):", "jpeg_label")
+                jpeg_label.text_color = (200, 200, 200)
+                jpeg_label.background_color = (45, 45, 52)
+                jpeg_label.font_scale = 0.45
+                jpeg_label.align = "left"
+                items.append(jpeg_label)
+
+                # ===== 关键修改: 只在TextBox为空时才更新默认值 =====
+                # 如果用户正在编辑，不要覆盖输入
+                if not self.jpeg_quality_textbox.is_focused and not self.jpeg_quality_textbox.text:
+                    self.jpeg_quality_textbox.text = str(stream.jpeg_quality)
+
+                items.append(self.jpeg_quality_textbox)
+
+                # 帧缩放标签
+                scale_label = Label(260, 200, 250, 20, "Frame Scale (0.1-1.0):", "scale_label")
+                scale_label.text_color = (200, 200, 200)
+                scale_label.background_color = (45, 45, 52)
+                scale_label.font_scale = 0.45
+                scale_label.align = "left"
+                items.append(scale_label)
+
+                # ===== 关键修改: 只在TextBox为空时才更新默认值 =====
+                if not self.frame_scale_textbox.is_focused and not self.frame_scale_textbox.text:
+                    self.frame_scale_textbox.text = f"{stream.frame_scale:.2f}"
+
+                items.append(self.frame_scale_textbox)
+
+                # 应用按钮
+                apply_btn = Button(10, 275, 490, 40, "Apply Quality Settings", "apply_quality_btn")
+                apply_btn.background_color = (70, 130, 180)
+                apply_btn.hover_color = (90, 150, 200)
+                apply_btn.font_scale = 0.55
+                apply_btn.on_click = self.on_apply_quality_click
+                items.append(apply_btn)
+
             else:
                 label = Label(10, 10, 510, 25, "No stream parameters received", "no_params")
                 label.text_color = (150, 150, 150)
@@ -650,8 +726,9 @@ class PIPLinkApp:
     def on_tcp_success(self):
         """TCP连接成功"""
         self.is_connected = True
-        self.connect_button.text = "Disconnect"
-        self.connect_button.background_color = (180, 70, 70)
+        # ===== 删除这些代码 =====
+        # self.connect_button.text = "Disconnect"
+        # self.connect_button.background_color = (180, 70, 70)
 
         if self.conn_status_label:
             self.conn_status_label.text = "Status: Connected"
@@ -664,6 +741,9 @@ class PIPLinkApp:
 
         # 启动参数接收器
         self.start_params_receiver()
+
+        # 刷新选项卡以更新按钮显示
+        self.refresh_current_tab()
 
     def on_tcp_timeout(self):
         """TCP连接超时"""
@@ -688,11 +768,13 @@ class PIPLinkApp:
             self.conn_status_label.text_color = (255, 100, 100)
         self.info_label.text = f"Connection failed: {type(error).__name__}"
 
+
     def on_tcp_disconnected(self):
         """TCP连接断开"""
         self.is_connected = False
-        self.connect_button.text = "Connect"
-        self.connect_button.background_color = (70, 130, 180)
+        # ===== 删除这些代码 =====
+        # self.connect_button.text = "Connect"
+        # self.connect_button.background_color = (70, 130, 180)
 
         if self.conn_status_label:
             self.conn_status_label.text = "Status: Disconnected"
@@ -705,6 +787,9 @@ class PIPLinkApp:
         self.stop_udp_receiver()
         self.stop_params_receiver()
 
+        # 刷新选项卡以更新按钮显示
+        self.refresh_current_tab()
+
     def on_connect_click(self, obj):
         """连接按钮点击回调"""
         if self.is_connected:
@@ -712,8 +797,10 @@ class PIPLinkApp:
             self.tcp_conn.disconnect()
             self.stop_udp_receiver()
             self.stop_params_receiver()
-            self.connect_button.text = "Connect"
-            self.connect_button.background_color = (70, 130, 180)
+
+            # ===== 删除这些代码，因为 build_connection_tab 会自动更新 =====
+            # self.connect_button.text = "Connect"
+            # self.connect_button.background_color = (70, 130, 180)
 
             if self.conn_status_label:
                 self.conn_status_label.text = "Status: Disconnected"
@@ -723,6 +810,9 @@ class PIPLinkApp:
                 self.conn_duration_label.text = "Duration: --:--:--"
 
             self.info_label.text = "Disconnected by user"
+
+            # 刷新选项卡以更新按钮显示
+            self.refresh_current_tab()
             return
 
         if not self.server_ip or not self.server_port:
@@ -742,6 +832,36 @@ class PIPLinkApp:
             return
 
         self.tcp_conn.handshake(self.server_ip, port_num, async_mode=True)
+
+    def on_apply_quality_click(self, obj):
+        """应用质量设置按钮点击回调"""
+        if not self.is_connected:
+            print("[Quality] 未连接到服务器")
+            return
+
+        try:
+            # 读取输入值
+            jpeg_quality = int(self.jpeg_quality_textbox.text) if self.jpeg_quality_textbox.text else 80
+            frame_scale = float(self.frame_scale_textbox.text) if self.frame_scale_textbox.text else 1.0
+
+            # 验证范围
+            jpeg_quality = max(1, min(100, jpeg_quality))
+            frame_scale = max(0.1, min(1.0, frame_scale))
+
+            # 发送到服务端
+            message = f"QUALITY:{jpeg_quality},{frame_scale:.2f}"
+            self.tcp_conn.socket.send(message.encode('utf-8'))
+
+            print(f"[Quality] 已发送: JPEG={jpeg_quality}, Scale={frame_scale:.2f}")
+
+            # 更新显示
+            self.jpeg_quality_textbox.text = str(jpeg_quality)
+            self.frame_scale_textbox.text = f"{frame_scale:.2f}"
+
+        except ValueError as e:
+            print(f"[Quality] 输入格式错误: {e}")
+        except Exception as e:
+            print(f"[Quality] 发送失败: {e}")
 
     def start_udp_receiver(self):
         """启动 UDP 接收器"""
@@ -886,7 +1006,14 @@ class PIPLinkApp:
                     self.toggle_debug_panel()
                 continue
 
-            if self.ip_textbox.handle_key(key) or self.port_textbox.handle_key(key):
+            # 处理所有TextBox的键盘输入
+            textboxes = [self.ip_textbox, self.port_textbox]
+            if self.jpeg_quality_textbox:
+                textboxes.append(self.jpeg_quality_textbox)
+            if self.frame_scale_textbox:
+                textboxes.append(self.frame_scale_textbox)
+
+            if any(tb.handle_key(key) for tb in textboxes):
                 continue
 
             if cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1:
