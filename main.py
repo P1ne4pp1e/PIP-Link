@@ -302,11 +302,88 @@ class PIPLinkApp:
         status_label.align = "left"
         items.append(status_label)
 
+        # === 新增：丢包率统计 ===
+        if self.udp_receiver:
+            stats = self.udp_receiver.get_statistics()
+
+            # 最近丢包率
+            recent_loss = stats['recent_packet_loss_rate'] * 100
+            recent_loss_label = Label(10, 100, 380, 25,
+                                      f"Packet Loss (Recent): {recent_loss:.2f}%",
+                                      "recent_loss")
+            recent_loss_label.background_color = (45, 45, 52)
+            recent_loss_label.font_scale = 0.5
+            recent_loss_label.font_thickness = 2
+            recent_loss_label.align = "left"
+
+            # 根据丢包率设置颜色
+            if recent_loss < 1.0:
+                recent_loss_label.text_color = (100, 255, 100)  # 绿色 - 优秀
+            elif recent_loss < 5.0:
+                recent_loss_label.text_color = (220, 180, 50)  # 黄色 - 良好
+            else:
+                recent_loss_label.text_color = (255, 100, 100)  # 红色 - 较差
+
+            items.append(recent_loss_label)
+
+            # 总体丢包率
+            overall_loss = stats['overall_packet_loss_rate'] * 100
+            overall_loss_label = Label(10, 130, 380, 25,
+                                       f"Packet Loss (Overall): {overall_loss:.2f}%",
+                                       "overall_loss")
+            overall_loss_label.text_color = (200, 200, 205)
+            overall_loss_label.background_color = (45, 45, 52)
+            overall_loss_label.font_scale = 0.45
+            overall_loss_label.font_thickness = 1
+            overall_loss_label.align = "left"
+            items.append(overall_loss_label)
+
+            # 数据包统计
+            packets_label = Label(10, 160, 380, 25,
+                                  f"Packets: {stats['total_packets_received']}/{stats['total_packets_expected']}",
+                                  "packets_stats")
+            packets_label.text_color = (200, 200, 205)
+            packets_label.background_color = (45, 45, 52)
+            packets_label.font_scale = 0.45
+            packets_label.font_thickness = 1
+            packets_label.align = "left"
+            items.append(packets_label)
+
+            # 丢弃帧数
+            dropped_label = Label(10, 190, 380, 25,
+                                  f"Frames Dropped: {stats['total_frames_dropped']}",
+                                  "dropped_frames")
+            dropped_label.text_color = (255, 150, 100)
+            dropped_label.background_color = (45, 45, 52)
+            dropped_label.font_scale = 0.45
+            dropped_label.font_thickness = 1
+            dropped_label.align = "left"
+            items.append(dropped_label)
+
+            # 缓冲区大小
+            buffer_label = Label(10, 220, 380, 25,
+                                 f"Buffer Size: {stats['buffer_size']}",
+                                 "buffer_size")
+            buffer_label.text_color = (150, 150, 155)
+            buffer_label.background_color = (45, 45, 52)
+            buffer_label.font_scale = 0.4
+            buffer_label.font_thickness = 1
+            buffer_label.align = "left"
+            items.append(buffer_label)
+        else:
+            no_data_label = Label(10, 100, 380, 25, "No UDP connection", "no_udp")
+            no_data_label.text_color = (150, 150, 150)
+            no_data_label.background_color = (45, 45, 52)
+            no_data_label.font_scale = 0.5
+            no_data_label.font_thickness = 1
+            no_data_label.align = "left"
+            items.append(no_data_label)
+
         # 参数更新时间
         time_since_update = time.time() - self.last_param_time if self.last_param_time > 0 else 999
         update_text = f"Last Update: {time_since_update:.1f}s ago" if time_since_update < 10 else "No recent updates"
 
-        update_label = Label(10, 100, 380, 25, update_text, "last_update")
+        update_label = Label(10, 260, 380, 25, update_text, "last_update")
         update_label.text_color = (200, 200, 205)
         update_label.background_color = (45, 45, 52)
         update_label.font_scale = 0.45

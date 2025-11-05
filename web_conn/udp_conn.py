@@ -2,36 +2,50 @@ import socket
 import threading
 import cv2
 import numpy as np
-from typing import Optional, Callable
+import time
+from typing import Optional, Callable, Dict
 from collections import defaultdict
 
 
 class UDPReceiver:
-    """UDP 视频流接收器"""
+    """UDP 视频流接收器 - 增强版（支持丢包统计和内存保护）"""
 
-    def __init__(self, local_port: int = 9999):
+    def __init__(self, local_port: int = 9999, buffer_timeout: float = 2.0):
         """
         初始化 UDP 接收器
 
         Args:
             local_port: 本地监听端口
+            buffer_timeout: 帧缓冲超时时间（秒），超时未完成的帧将被清理
         """
         self.local_port = local_port
+        self.buffer_timeout = buffer_timeout
         self.is_running = False
         self.socket = None
         self.receive_thread = None
+        self.cleanup_thread = None
 
         # 帧重组缓冲
-        self.frame_buffer = defaultdict(dict)  # {frame_id: {packet_id: data}}
+        self.frame_buffer: Dict[int, dict] = defaultdict(dict)  # {frame_id: {packet_id: data}}
+        self.frame_metadata: Dict[int, dict] = {}  # {frame_id: {total_packets, received_time, expected_packets}}
         self.frame_lock = threading.Lock()
 
         # 当前完整帧
         self.current_frame = None
         self.on_frame_received: Optional[Callable[[np.ndarray], None]] = None
 
-        # 统计
+        # 统计信息
         self.total_packets_received = 0
         self.total_frames_received = 0
+        self.total_packets_expected = 0
+        self.total_packets_lost = 0
+        self.total_frames_dropped = 0  # 超时丢弃的不完整帧
+
+        # 丢包率统计（最近1秒）
+        self.recent_packets_received = 0
+        self.recent_packets_expected = 0
+        self.recent_packet_loss_rate = 0.0
+        self.last_stats_time = time.time()
 
     def start(self):
         """启动 UDP 接收器"""
@@ -44,11 +58,19 @@ class UDPReceiver:
             self.socket.bind(('0.0.0.0', self.local_port))
 
             self.is_running = True
+
+            # 启动接收线程
             self.receive_thread = threading.Thread(target=self._receive_loop, daemon=True)
             self.receive_thread.start()
-            print(f"[UDP Receiver] 已启动，监听端口 {self.local_port}")
+
+            # 启动清理线程
+            self.cleanup_thread = threading.Thread(target=self._cleanup_loop, daemon=True)
+            self.cleanup_thread.start()
+
+            print(f"[UDP Receiver] Started on port {self.local_port}")
+            print(f"[UDP Receiver] Buffer timeout: {self.buffer_timeout}s")
         except Exception as e:
-            print(f"[UDP Receiver] 启动失败: {e}")
+            print(f"[UDP Receiver] Failed to start: {e}")
 
     def stop(self):
         """停止 UDP 接收器"""
@@ -58,12 +80,52 @@ class UDPReceiver:
                 self.socket.close()
             except:
                 pass
-        print("[UDP Receiver] 已停止")
+        print("[UDP Receiver] Stopped")
 
     def get_frame(self) -> Optional[np.ndarray]:
         """获取当前接收到的完整帧"""
         with self.frame_lock:
             return self.current_frame.copy() if self.current_frame is not None else None
+
+    def get_packet_loss_rate(self) -> float:
+        """
+        获取丢包率（最近1秒）
+
+        Returns:
+            丢包率 (0.0 - 1.0)
+        """
+        return self.recent_packet_loss_rate
+
+    def get_overall_packet_loss_rate(self) -> float:
+        """
+        获取总体丢包率
+
+        Returns:
+            总体丢包率 (0.0 - 1.0)
+        """
+        if self.total_packets_expected == 0:
+            return 0.0
+        return self.total_packets_lost / self.total_packets_expected
+
+    def get_statistics(self) -> dict:
+        """
+        获取详细统计信息
+
+        Returns:
+            统计字典
+        """
+        overall_loss_rate = self.get_overall_packet_loss_rate()
+
+        return {
+            'total_packets_received': self.total_packets_received,
+            'total_packets_expected': self.total_packets_expected,
+            'total_packets_lost': self.total_packets_lost,
+            'total_frames_received': self.total_frames_received,
+            'total_frames_dropped': self.total_frames_dropped,
+            'recent_packet_loss_rate': self.recent_packet_loss_rate,
+            'overall_packet_loss_rate': overall_loss_rate,
+            'buffer_size': len(self.frame_buffer)
+        }
 
     def _receive_loop(self):
         """接收循环"""
@@ -81,14 +143,27 @@ class UDPReceiver:
                 packet_data = data[8:]
 
                 self.total_packets_received += 1
-
-                # 每 100 个包打印一次日志
-                if self.total_packets_received % 100 == 0:
-                    print(f"[UDP Receiver] 已接收 {self.total_packets_received} 个包")
+                self.recent_packets_received += 1
 
                 # 保存包数据
                 with self.frame_lock:
-                    self.frame_buffer[frame_id][packet_idx] = packet_data
+                    # 如果是该帧的第一个包，初始化元数据
+                    if frame_id not in self.frame_metadata:
+                        self.frame_metadata[frame_id] = {
+                            'total_packets': total_packets,
+                            'received_time': time.time(),
+                            'expected_packets': set(range(total_packets))
+                        }
+                        self.total_packets_expected += total_packets
+                        self.recent_packets_expected += total_packets
+
+                    # 保存包数据
+                    if packet_idx not in self.frame_buffer[frame_id]:
+                        self.frame_buffer[frame_id][packet_idx] = packet_data
+
+                        # 从期望集合中移除
+                        if packet_idx in self.frame_metadata[frame_id]['expected_packets']:
+                            self.frame_metadata[frame_id]['expected_packets'].remove(packet_idx)
 
                     # 检查是否接收完整
                     if len(self.frame_buffer[frame_id]) == total_packets:
@@ -107,13 +182,65 @@ class UDPReceiver:
 
                         # 清除缓冲
                         del self.frame_buffer[frame_id]
+                        del self.frame_metadata[frame_id]
 
-                        # print(f"[UDP Receiver] ✓ 接收完整帧 {frame_id} "
-                        #       f"({self.total_frames_received} 总帧数)")
+                # 定期更新统计（每秒）
+                current_time = time.time()
+                if current_time - self.last_stats_time >= 1.0:
+                    self._update_statistics()
+                    self.last_stats_time = current_time
 
             except Exception as e:
                 if self.is_running:
-                    print(f"[UDP Receiver] 接收错误: {e}")
+                    print(f"[UDP Receiver] Receive error: {e}")
+
+    def _cleanup_loop(self):
+        """清理循环 - 定期清理超时的不完整帧"""
+        while self.is_running:
+            try:
+                time.sleep(0.5)  # 每0.5秒检查一次
+
+                current_time = time.time()
+                frames_to_remove = []
+
+                with self.frame_lock:
+                    for frame_id, metadata in self.frame_metadata.items():
+                        # 检查是否超时
+                        if current_time - metadata['received_time'] > self.buffer_timeout:
+                            frames_to_remove.append(frame_id)
+
+                            # 统计丢失的包数
+                            lost_packets = len(metadata['expected_packets'])
+                            self.total_packets_lost += lost_packets
+                            self.total_frames_dropped += 1
+
+                    # 清理超时帧
+                    for frame_id in frames_to_remove:
+                        if frame_id in self.frame_buffer:
+                            del self.frame_buffer[frame_id]
+                        if frame_id in self.frame_metadata:
+                            del self.frame_metadata[frame_id]
+
+                    if frames_to_remove:
+                        print(f"[UDP Receiver] Cleaned {len(frames_to_remove)} timeout frames, "
+                              f"buffer size: {len(self.frame_buffer)}")
+
+            except Exception as e:
+                if self.is_running:
+                    print(f"[UDP Receiver] Cleanup error: {e}")
+
+    def _update_statistics(self):
+        """更新统计信息（每秒调用）"""
+        # 计算最近1秒的丢包率
+        if self.recent_packets_expected > 0:
+            packets_lost_recent = self.recent_packets_expected - self.recent_packets_received
+            self.recent_packet_loss_rate = packets_lost_recent / self.recent_packets_expected
+        else:
+            self.recent_packet_loss_rate = 0.0
+
+        # 重置计数器
+        self.recent_packets_received = 0
+        self.recent_packets_expected = 0
 
     def _reassemble_frame(self, frame_id: int, total_packets: int) -> Optional[bytes]:
         """
@@ -135,3 +262,38 @@ class UDPReceiver:
             return frame_data
         except:
             return None
+
+
+# ==================== 测试代码 ====================
+if __name__ == '__main__':
+    def on_frame(frame):
+        print(f"Received frame: {frame.shape}")
+        cv2.imshow('UDP Receiver Test', frame)
+
+
+    receiver = UDPReceiver(9999)
+    receiver.on_frame_received = on_frame
+    receiver.start()
+
+    print("UDP Receiver Test - Press 'q' to quit")
+
+    try:
+        while True:
+            stats = receiver.get_statistics()
+
+            print(f"\r[Stats] Frames: {stats['total_frames_received']} | "
+                  f"Packets: {stats['total_packets_received']}/{stats['total_packets_expected']} | "
+                  f"Loss Rate: {stats['recent_packet_loss_rate'] * 100:.2f}% (recent) / "
+                  f"{stats['overall_packet_loss_rate'] * 100:.2f}% (overall) | "
+                  f"Dropped: {stats['total_frames_dropped']} | "
+                  f"Buffer: {stats['buffer_size']}", end='')
+
+            key = cv2.waitKey(100) & 0xFF
+            if key == ord('q'):
+                break
+
+    except KeyboardInterrupt:
+        print("\nStopping receiver...")
+    finally:
+        receiver.stop()
+        cv2.destroyAllWindows()
