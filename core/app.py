@@ -1,3 +1,4 @@
+import pygame
 import cv2
 import numpy as np
 import time
@@ -44,6 +45,10 @@ class ApplicationController:
     """应用主控制器"""
 
     def __init__(self):
+        pygame.init()
+        self.screen = None
+        self.window_center = (Config.DEFAULT_WIDTH // 2, Config.DEFAULT_HEIGHT // 2)
+
         self.window_name = Config.WINDOW_NAME
 
         # 核心组件
@@ -141,21 +146,17 @@ class ApplicationController:
             self.saved_width = self.ui.width
             self.saved_height = self.ui.height
 
-            # 切换到全屏
-            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
-
             # 获取屏幕分辨率
-            import tkinter as tk
-            root_tk = tk.Tk()
-            width = root_tk.winfo_screenwidth()
-            height = root_tk.winfo_screenheight()
-            root_tk.destroy()
+            display_info = pygame.display.Info()
+            width = display_info.current_w
+            height = display_info.current_h
 
+            # 切换到全屏
+            self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
             self.ui.resize(width, height)
+            self.window_center = (width // 2, height // 2)
         else:
-            # 切换回窗口模式
-            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
-            # 恢复之前的窗口大小
+            # 恢复窗口模式
             if hasattr(self, 'saved_width'):
                 width = self.saved_width
                 height = self.saved_height
@@ -163,10 +164,11 @@ class ApplicationController:
                 width = Config.DEFAULT_WIDTH
                 height = Config.DEFAULT_HEIGHT
 
-            cv2.resizeWindow(self.window_name, width, height)
+            self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
             self.ui.resize(width, height)
+            self.window_center = (width // 2, height // 2)
 
-            # 刷新Display选项卡
+        # 刷新Display选项卡
         self.ui.debug_panel._rebuild_content()
 
     def _set_resolution(self, index: int):
@@ -178,8 +180,9 @@ class ApplicationController:
         res_name, (new_width, new_height) = Config.AVAILABLE_RESOLUTIONS[index]
 
         # 调整窗口
-        cv2.resizeWindow(self.window_name, new_width, new_height)
+        self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
         self.ui.resize(new_width, new_height)
+        self.window_center = (new_width // 2, new_height // 2)
 
         print(f"[Display] Resolution changed to {res_name}")
         self.ui.debug_panel._rebuild_content()
@@ -229,54 +232,23 @@ class ApplicationController:
     def _hide_cursor(self):
         """隐藏系统光标"""
         if self.state.ui.cursor_hidden:
-            return  # 已隐藏，不重复操作
+            return
 
-        try:
-            import platform
-            system = platform.system()
+        pygame.mouse.set_visible(False)
+        # 将鼠标移到窗口中心
+        pygame.mouse.set_pos(self.window_center)
 
-            if system == 'Windows':
-                import ctypes
-                # 关键：需要调用多次确保计数器 < 0，然后设置光标为NULL
-                while ctypes.windll.user32.ShowCursor(False) >= 0:
-                    pass
-                # 立即设置光标为NULL
-                ctypes.windll.user32.SetCursor(None)
-            elif system == 'Linux':
-                import subprocess
-                try:
-                    subprocess.run(['xdotool', 'mousemove', '0', '0'],
-                                   check=False, timeout=1)
-                except:
-                    pass
-            elif system == 'Darwin':
-                # macOS: 暂时使用移动光标方案
-                pass
-
-            self.state.ui.cursor_hidden = True
-            print("[Cursor] 光标已隐藏")
-        except Exception as e:
-            print(f"[Cursor] 隐藏光标失败: {e}")
+        self.state.ui.cursor_hidden = True
+        print("[Cursor] 光标已隐藏")
 
     def _show_cursor(self):
         """恢复系统光标"""
         if not self.state.ui.cursor_hidden:
-            return  # 已显示，不重复操作
+            return
 
-        try:
-            import platform
-            system = platform.system()
-
-            if system == 'Windows':
-                import ctypes
-                # 恢复：调用多次ShowCursor(True)直到计数器 >= 0
-                while ctypes.windll.user32.ShowCursor(True) < 0:
-                    pass
-
-            self.state.ui.cursor_hidden = False
-            print("[Cursor] 光标已恢复")
-        except Exception as e:
-            print(f"[Cursor] 恢复光标失败: {e}")
+        pygame.mouse.set_visible(True)
+        self.state.ui.cursor_hidden = False
+        print("[Cursor] 光标已恢复")
 
     def on_mouse_move(self, x, y):
         """鼠标移动"""
@@ -284,17 +256,36 @@ class ApplicationController:
             current_time = time.time()
             dt = current_time - getattr(self, 'last_mouse_time', current_time)
             self.last_mouse_time = current_time
-            self.network.control.update_mouse_position(x, y, dt)
+
+            # 计算相对中心的速度
+            dx = x - self.window_center[0]
+            dy = y - self.window_center[1]
+
+            if dt > 0:
+                vx = dx / dt
+                vy = dy / dt
+                self.network.control.update_mouse_position(x, y, dt)
+
+            # 将鼠标重置到中心
+            pygame.mouse.set_pos(self.window_center)
 
     def run(self):
         """主循环"""
-        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(self.window_name, self.ui.width, self.ui.height)
-        cv2.setMouseCallback(self.window_name, self.ui.handle_mouse_event)
+        # 创建pygame窗口
+        self.screen = pygame.display.set_mode((self.ui.width, self.ui.height))
+        pygame.display.set_caption(self.window_name)
+
+        self.window_center = (self.ui.width // 2, self.ui.height // 2)
 
         self.mouse_tracker.start()
-
         last_time = time.time()
+
+        # 使用独立的时钟，不限制主循环帧率
+        clock = pygame.time.Clock()
+
+        # 渲染缓存
+        self.last_canvas = None
+        self.canvas_lock = threading.Lock()
 
         while True:
             current_time = time.time()
@@ -308,23 +299,54 @@ class ApplicationController:
             if self.state.connection.is_connected and self.network.tcp:
                 self.state.connection.connection_duration = self.network.tcp.get_connection_duration()
 
-            # 创建画布
+            # 处理pygame事件（这部分必须快速完成）
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self._cleanup()
+                    return
+                elif event.type == pygame.VIDEORESIZE:
+                    self.ui.resize(event.w, event.h)
+                    self.window_center = (event.w // 2, event.h // 2)
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    self.ui.handle_mouse_event(cv2.EVENT_LBUTTONDOWN, event.pos[0], event.pos[1], 0, None)
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    self.ui.handle_mouse_event(cv2.EVENT_LBUTTONUP, event.pos[0], event.pos[1], 0, None)
+                elif event.type == pygame.MOUSEMOTION:
+                    self.on_mouse_move(event.pos[0], event.pos[1])
+                elif event.type == pygame.KEYDOWN:
+                    key = event.key
+                    if key == pygame.K_ESCAPE:
+                        key = 27
+                    elif key == pygame.K_RETURN:
+                        key = 13
+                    elif key == pygame.K_BACKSPACE:
+                        key = 8
+                    elif 32 <= key <= 126:
+                        pass
+                    else:
+                        key = -1
+
+                    if key != -1:
+                        self._handle_key(key)
+
+            # 创建画布（异步）
             canvas = self._create_canvas()
 
-            # 更新和绘制
+            # 更新和绘制UI
             self.ui.update(dt)
             self.ui.draw(canvas)
 
-            # 显示
-            cv2.imshow(self.window_name, canvas)
+            # 快速转换并显示
+            try:
+                canvas_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
+                canvas_surface = pygame.surfarray.make_surface(canvas_rgb.swapaxes(0, 1))
+                self.screen.blit(canvas_surface, (0, 0))
+                pygame.display.flip()
+            except:
+                pass
 
-            # 按键处理
-            key = cv2.waitKey(1)
-            if not self._handle_key(key):
-                break
-
-            if cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1:
-                break
+            # 不要限制帧率，让主循环尽可能快
+            # clock.tick(60)  # 注释掉这行
 
         self._cleanup()
 
@@ -352,4 +374,4 @@ class ApplicationController:
         """清理资源"""
         self.network.disconnect()
         self.mouse_tracker.stop()
-        cv2.destroyAllWindows()
+        pygame.quit()

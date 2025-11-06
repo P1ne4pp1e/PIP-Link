@@ -131,12 +131,27 @@ class NetworkManager:
         stats = {
             'frames_received': self.state.video.frames_received,
             'latency_ms': self.state.video.latency_ms,
+            # 添加默认值,防止KeyError
+            'recent_packet_loss_rate': 0.0,
+            'overall_packet_loss_rate': 0.0,
+            'total_packets_received': 0,
+            'total_packets_expected': 0,
+            'total_packets_lost': 0,
+            'total_frames_dropped': 0,
+            'buffer_size': 0,
+            'total_bytes_received': 0,
+            'current_bandwidth_mbps': 0.0,
+            'average_bandwidth_mbps': 0.0,
+            'peak_bandwidth_mbps': 0.0,
+            'bandwidth_history': []
         }
 
         if self.udp:
-            stats.update(self.udp.get_statistics())
+            udp_stats = self.udp.get_statistics()
+            stats.update(udp_stats)
 
         if self.control:
-            stats.update(self.control.get_statistics())
+            control_stats = self.control.get_statistics()
+            stats.update(control_stats)
 
         return stats
