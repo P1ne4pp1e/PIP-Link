@@ -114,6 +114,8 @@ class KeyboardEncoder:
 
         # F5 切换回调
         self.on_f5_pressed: Optional[callable] = None
+        # 状态变化回调
+        self.on_state_change: Optional[callable] = None
 
     def start(self):
         """启动键盘监听"""

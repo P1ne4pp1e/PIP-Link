@@ -68,6 +68,8 @@ class ControlSender:
 
             # 启动键盘监听
             self.keyboard_encoder.start()
+            # 添加状态变化回调
+            self.keyboard_encoder.on_state_change = self._on_state_change_callback
 
             # 启动发送线程
             self.send_thread = threading.Thread(target=self._send_loop, daemon=True)
@@ -91,11 +93,23 @@ class ControlSender:
 
         print("[ControlSender] 已停止")
 
+    # 在第 84 行 stop() 方法后添加新方法
+    def _on_state_change_callback(self, new_state):
+        """状态变化回调,通知事件总线"""
+        if hasattr(self, 'event_bus'):
+            from utils.events import Events
+            self.event_bus.publish(Events.CONTROL_STATE_CHANGED, new_state)
+
     def toggle_state(self):
         """切换 Ready/Not Ready 状态"""
         self.state = 1 - self.state
         state_str = "Ready" if self.state == 1 else "Not Ready"
         print(f"[ControlSender] 状态切换 -> {state_str}")
+
+        # 触发回调
+        if hasattr(self, '_on_state_change_callback'):
+            self._on_state_change_callback(self.state)
+
         return self.state
 
     def update_mouse_position(self, x: int, y: int, dt: float):

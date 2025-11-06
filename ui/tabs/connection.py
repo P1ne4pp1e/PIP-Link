@@ -17,18 +17,32 @@ class ConnectionTab:
         self.status_label = Label(10, 10, 510, 25, "Status: Disconnected", "conn_status")
         self.status_label.text_color = (255, 100, 100)
         self.status_label.background_color = (45, 45, 52)
+        self.status_label.border_width = 0
 
         self.duration_label = Label(10, 40, 510, 20, "Duration: --:--:--", "conn_duration")
         self.duration_label.text_color = (200, 200, 200)
         self.duration_label.background_color = (45, 45, 52)
+        self.duration_label.border_width = 0
 
         # IP输入
         ip_label = Label(10, 70, 510, 20, "Server IP:", "ip_label")
+        ip_label.text_color = (200, 200, 200)
+        ip_label.background_color = (45, 45, 52)
+        ip_label.border_width = 0
+        ip_label.font_scale = 0.45
+        ip_label.align = "left"
+
         self.ip_textbox = TextBox(10, 95, 510, 36, "ip_textbox")
         self.ip_textbox.placeholder = "192.168.1.100"
 
         # 端口输入
         port_label = Label(10, 140, 510, 20, "Port:", "port_label")
+        port_label.text_color = (200, 200, 200)
+        port_label.background_color = (45, 45, 52)
+        port_label.border_width = 0
+        port_label.font_scale = 0.45
+        port_label.align = "left"
+
         self.port_textbox = TextBox(10, 165, 510, 36, "port_textbox")
         self.port_textbox.placeholder = "8888"
 
@@ -48,11 +62,20 @@ class ConnectionTab:
         if state.connection.is_connected:
             self.status_label.text = "Status: Connected"
             self.status_label.text_color = (100, 255, 100)
+
+            # 更新时长显示
+            duration = state.connection.connection_duration
+            hours = duration // 3600
+            minutes = (duration % 3600) // 60
+            seconds = duration % 60
+            self.duration_label.text = f"Duration: {hours:02d}:{minutes:02d}:{seconds:02d}"
+
             self.connect_button.text = "Disconnect"
             self.connect_button.background_color = (180, 70, 70)
         else:
             self.status_label.text = "Status: Disconnected"
             self.status_label.text_color = (255, 100, 100)
+            self.duration_label.text = "Duration: --:--:--"
             self.connect_button.text = "Connect"
             self.connect_button.background_color = (70, 130, 180)
 

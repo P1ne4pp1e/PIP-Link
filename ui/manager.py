@@ -62,6 +62,15 @@ class UIManager:
             self.width - 320, self.height - 80,
             300, 60, "Press ESC to toggle Debug Panel", "info_display"
         )
+        self.info_label.text_color = (200, 200, 200)
+        self.info_label.background_color = (50, 50, 55)
+        self.info_label.border_color = (100, 100, 110)
+        self.info_label.border_width = 1
+        self.info_label.alpha = 0.85
+        self.info_label.font_scale = 0.45
+        self.info_label.align = "center"
+        self.info_label.valign = "center"
+
         self.root.add_child(self.info_label)
 
         # 状态指示器

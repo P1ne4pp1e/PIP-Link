@@ -204,6 +204,10 @@ class ApplicationController:
             dt = current_time - last_time
             last_time = current_time
 
+            # 更新连接时长
+            if self.state.connection.is_connected and self.network.tcp:
+                self.state.connection.connection_duration = self.network.tcp.get_connection_duration()
+
             # 创建画布
             canvas = self._create_canvas()
 

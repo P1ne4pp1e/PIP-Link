@@ -56,6 +56,7 @@ class NetworkManager:
 
         # 启动控制发送
         self.control = ControlSender(Config.CONTROL_SEND_RATE)
+        self.control.event_bus = self.event_bus  # 传递event_bus
         self.control.start(ip, port)
 
         self.event_bus.publish(Events.CONNECTED)

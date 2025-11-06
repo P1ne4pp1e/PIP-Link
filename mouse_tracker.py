@@ -15,9 +15,11 @@ class MouseTracker:
         self.last_mouse_update_time = time.time()
         self._stop_flag = False
 
+    # 第 14 行,修改 _on_move_internal 方法
     def _on_move_internal(self, x, y):
-        """内部触发：事件监听器调用"""
-        pass
+        """内部触发:事件监听器调用"""
+        if self.on_move_callback:
+            self.on_move_callback(x, y)
 
     def _poll_mouse_position(self):
         """定时轮询鼠标位置，即使没有事件也能更新"""
