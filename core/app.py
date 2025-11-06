@@ -235,6 +235,9 @@ class ApplicationController:
             dt = current_time - last_time
             last_time = current_time
 
+            if self.network.control:
+                self.state.control.state = self.network.control.state
+
             # 更新连接时长
             if self.state.connection.is_connected and self.network.tcp:
                 self.state.connection.connection_duration = self.network.tcp.get_connection_duration()

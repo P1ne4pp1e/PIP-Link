@@ -11,8 +11,8 @@ class Config:
     CONTROL_PORT_OFFSET = 3  # 控制端口
 
     # 网络参数
-    TCP_TIMEOUT = 5
-    HEARTBEAT_INTERVAL = 5
+    TCP_TIMEOUT = 3
+    HEARTBEAT_INTERVAL = 2
     BUFFER_TIMEOUT = 2.0
     CONTROL_SEND_RATE = 100
 

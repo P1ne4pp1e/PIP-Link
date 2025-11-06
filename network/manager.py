@@ -64,8 +64,15 @@ class NetworkManager:
     def _on_tcp_disconnected(self):
         """TCP连接断开"""
         self.state.connection.is_connected = False
+
+        # 强制转为 Not Ready 状态
+        self.state.control.state = 0
+
         self._cleanup_connections()
+
+        # 发布断开事件和状态变化事件
         self.event_bus.publish(Events.DISCONNECTED)
+        self.event_bus.publish(Events.CONTROL_STATE_CHANGED, 0)
 
     def _on_frame_received(self, frame):
         """视频帧接收回调"""
