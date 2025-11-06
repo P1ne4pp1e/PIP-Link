@@ -46,6 +46,7 @@ class TextBox(Object):
                 return True
             else:
                 self.is_focused = False
+                Object.set_focus(None)  # 移除焦点
 
         return super().handle_mouse_event(event, x, y, flags, param)
 
@@ -83,9 +84,12 @@ class TextBox(Object):
         # 普通字符
         elif 32 <= key <= 126:
             if len(self.text) < self.max_length:
-                self.text += chr(key)
-                if self.on_text_change:
-                    self.on_text_change(self)
+                char = chr(key)
+                # 只允许数字、小数点、减号
+                if char.isdigit() or char in '.-':
+                    self.text += char
+                    if self.on_text_change:
+                        self.on_text_change(self)
             return True
 
         return False

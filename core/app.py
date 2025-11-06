@@ -1,13 +1,44 @@
 import cv2
 import numpy as np
 import time
+import threading
+from pynput import mouse
+import pyautogui
 from core.config import Config
 from core.state import AppState
 from utils.events import EventBus, Events
 from network.manager import NetworkManager
 from ui.manager import UIManager
-from mouse_tracker import MouseTracker
 
+
+class _MouseTracker:
+    """内部鼠标追踪器"""
+    def __init__(self, on_move=None, poll_interval=0.05):
+        self.on_move_callback = on_move
+        self.poll_interval = poll_interval
+        self._stop_flag = False
+
+    def _on_move_internal(self, x, y):
+        """内部触发:事件监听器调用"""
+        if self.on_move_callback:
+            self.on_move_callback(x, y)
+
+    def _poll_mouse_position(self):
+        """定时轮询鼠标位置"""
+        while not self._stop_flag:
+            x, y = pyautogui.position()
+            if self.on_move_callback:
+                self.on_move_callback(x, y)
+            time.sleep(self.poll_interval)
+
+    def start(self):
+        listener = mouse.Listener(on_move=self._on_move_internal)
+        listener.daemon = True
+        listener.start()
+        threading.Thread(target=self._poll_mouse_position, daemon=True).start()
+
+    def stop(self):
+        self._stop_flag = True
 
 class ApplicationController:
     """应用主控制器"""
@@ -22,7 +53,7 @@ class ApplicationController:
         self.ui = UIManager(self.state, self.event_bus)
 
         # 鼠标追踪
-        self.mouse_tracker = MouseTracker(on_move=self.on_mouse_move, poll_interval=0.001)
+        self.mouse_tracker = _MouseTracker(on_move=self.on_mouse_move, poll_interval=0.001)
 
         self._setup_event_handlers()
 
@@ -157,7 +188,7 @@ class ApplicationController:
             # 先检查是否有TextBox聚焦
             from ui.components.base_object import Object
             focused = Object.get_focused_object()
-            if focused and hasattr(focused, 'is_focused'):
+            if focused and hasattr(focused, 'is_focused') and focused.is_focused:
                 focused.is_focused = False
                 Object.set_focus(None)
             else:
@@ -247,25 +278,6 @@ class ApplicationController:
             canvas[:] = (30, 30, 30)
 
         return canvas
-
-    def _handle_key(self, key: int) -> bool:
-        """处理按键"""
-        if key == 27:  # ESC
-            self.ui.toggle_debug_panel()
-
-        # 让TextBox处理按键
-        textboxes = [
-            self.ui.connection_tab.ip_textbox,
-            self.ui.connection_tab.port_textbox,
-            self.ui.stream_tab.jpeg_quality_textbox,
-            self.ui.stream_tab.frame_scale_textbox,
-        ]
-
-        for tb in textboxes:
-            if tb.handle_key(key):
-                return True
-
-        return True
 
     def _cleanup(self):
         """清理资源"""
