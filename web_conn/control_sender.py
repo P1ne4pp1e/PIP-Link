@@ -5,8 +5,10 @@
 import socket
 import threading
 import time
-from network.control_packet import ControlPacket
-from network.keyboard_encoder import KeyboardEncoder
+import numpy as np
+from typing import Optional
+from web_conn.control_packet import ControlPacket
+from web_conn.keyboard_encoder import KeyboardEncoder
 
 
 class ControlSender:

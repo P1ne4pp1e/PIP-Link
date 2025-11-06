@@ -5,9 +5,9 @@
 
 import cv2
 import numpy as np
-from typing import List, Callable
-from ui.components.base_object import Object
-from ui.components.label import Label
+from typing import List, Optional, Callable
+from ui_components.base_object import Object
+from ui_components.label import Label
 
 
 class Tab:

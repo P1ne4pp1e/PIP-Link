@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
-from ui.ui_components.base_object import Object
+from typing import Tuple, Optional, Callable
+from ui_components.base_object import Object
 
 class Panel(Object):
     """面板容器组件"""

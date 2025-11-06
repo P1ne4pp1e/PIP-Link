@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-from typing import Optional, Callable
-from ui.components.base_object import Object
+from typing import Tuple, Optional, Callable
+from ui_components.base_object import Object
 
 class TextBox(Object):
     """文本输入框组件"""

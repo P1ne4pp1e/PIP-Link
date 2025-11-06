@@ -6,7 +6,7 @@
 import socket
 import threading
 from typing import Optional, Callable
-from network.params_packet import ParamsPacket
+from web_conn.params_packet import ParamsPacket
 
 
 class ParamsReceiver:

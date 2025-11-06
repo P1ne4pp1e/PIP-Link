@@ -1,1 +1,3 @@
 .idea
+ui_components/__pycache__
+web_conn/__pycache__
