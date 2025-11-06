@@ -2,14 +2,20 @@ import numpy as np
 import cv2
 import time
 import threading
+
 from ui_components.base_object import Object
 from ui_components.label import Label
 from ui_components.textbox import TextBox
 from ui_components.button import Button
 from ui_components.tabbed_panel import TabbedPanel
+from ui_components.state_indicator import StateIndicator
+
 from web_conn.tcp_conn import TCPConnection
 from web_conn.udp_conn import UDPReceiver
 from web_conn.params_receiver import ParamsReceiver
+from web_conn.control_sender import ControlSender
+
+from mouse_tracker import MouseTracker
 
 
 class PIPLinkApp:
@@ -127,6 +133,22 @@ class PIPLinkApp:
         self.gamma_textbox.placeholder = "1.0"
         self.gamma_textbox.max_length = 4
         self.gamma_textbox.font_scale = 0.5
+
+        # ===== 新增：控制发送器 =====
+        self.control_sender = None
+
+        # ===== 新增：状态指示器 (左下角) =====
+        self.state_indicator = StateIndicator(20, self.height - 20)
+
+        # ===== 新增：鼠标隐藏相关 =====
+        self.cursor_hidden = False
+        self.last_mouse_x = 0
+        self.last_mouse_y = 0
+
+        self.last_state = 0
+        self.current_state = 0
+
+        self.mouse_tracker = MouseTracker(on_move=self.on_mouse_move, poll_interval=0.001)
 
         # 初始化UI
         self.setup_ui()
@@ -777,6 +799,10 @@ class PIPLinkApp:
         self.info_label.x = self.width - info_width - 20
         self.info_label.y = self.height - info_height - 20
 
+        # ===== 新增：更新状态指示器位置 =====
+        self.state_indicator.x = 20
+        self.state_indicator.y = self.height - 20
+
         self.refresh_current_tab()
 
     def set_resolution(self, index: int):
@@ -803,6 +829,10 @@ class PIPLinkApp:
         info_height = 60
         self.info_label.x = self.width - info_width - 20
         self.info_label.y = self.height - info_height - 20
+
+        # ===== 新增：更新状态指示器位置 =====
+        self.state_indicator.x = 20
+        self.state_indicator.y = self.height - 20
 
         print(f"[Display] Resolution changed to {res_name}")
         self.refresh_current_tab()
@@ -854,9 +884,6 @@ class PIPLinkApp:
     def on_tcp_success(self):
         """TCP连接成功"""
         self.is_connected = True
-        # ===== 删除这些代码 =====
-        # self.connect_button.text = "Disconnect"
-        # self.connect_button.background_color = (180, 70, 70)
 
         if self.conn_status_label:
             self.conn_status_label.text = "Status: Connected"
@@ -869,6 +896,9 @@ class PIPLinkApp:
 
         # 启动参数接收器
         self.start_params_receiver()
+
+        # ===== 新增：启动控制发送器 =====
+        self.start_control_sender()
 
         # 刷新选项卡以更新按钮显示
         self.refresh_current_tab()
@@ -899,9 +929,6 @@ class PIPLinkApp:
     def on_tcp_disconnected(self):
         """TCP连接断开"""
         self.is_connected = False
-        # ===== 删除这些代码 =====
-        # self.connect_button.text = "Connect"
-        # self.connect_button.background_color = (70, 130, 180)
 
         if self.conn_status_label:
             self.conn_status_label.text = "Status: Disconnected"
@@ -913,6 +940,9 @@ class PIPLinkApp:
         self.info_label.text = "Connection lost"
         self.stop_udp_receiver()
         self.stop_params_receiver()
+
+        # ===== 新增：停止控制发送器 =====
+        self.stop_control_sender()
 
         # 刷新选项卡以更新按钮显示
         self.refresh_current_tab()
@@ -1117,6 +1147,55 @@ class PIPLinkApp:
         # 刷新当前选项卡内容
         self.refresh_current_tab()
 
+    def start_control_sender(self):
+        """启动控制发送器"""
+        if self.control_sender is None:
+            self.control_sender = ControlSender(target_rate=100)
+            self.control_sender.start(self.server_ip, int(self.server_port))
+            print(f"[INFO] Control sender started -> {self.server_ip}:{int(self.server_port) + 3}")
+
+    def stop_control_sender(self):
+        """停止控制发送器"""
+        if self.control_sender:
+            self.control_sender.stop()
+            self.control_sender = None
+            print("[INFO] Control sender stopped")
+
+    def toggle_control_state(self):
+        """切换控制状态 (F5触发)"""
+        # print("F5F5")
+        if self.control_sender:
+            new_state = self.control_sender.toggle_state()
+            # print("F5")
+            if new_state == 1:  # Ready
+                # ===== 修复：直接更新StateIndicator =====
+                self.state_indicator.text = "Ready"
+                self.state_indicator.color = (0, 255, 0)
+                self.state_indicator.trigger_animation("Ready", (0, 255, 0))
+                self.hide_cursor()
+            else:  # Not Ready
+                # ===== 修复：直接更新StateIndicator =====
+                self.state_indicator.text = "Not Ready"
+                self.state_indicator.color = (100, 100, 255)
+                self.state_indicator.trigger_animation("Not Ready", (100, 100, 255))
+                self.show_cursor()
+
+    def hide_cursor(self):
+        """隐藏鼠标指针"""
+        if not self.cursor_hidden:
+            # 创建1x1透明图像作为光标
+            blank_cursor = np.zeros((1, 1, 4), dtype=np.uint8)
+            # OpenCV无法直接隐藏光标，需要通过系统API
+            # 这里使用标志位，在鼠标回调中不显示光标效果
+            self.cursor_hidden = True
+            print("[Cursor] Hidden")
+
+    def show_cursor(self):
+        """显示鼠标指针"""
+        if self.cursor_hidden:
+            self.cursor_hidden = False
+            print("[Cursor] Visible")
+
     def refresh_current_tab(self):
         """刷新当前选项卡的内容"""
         if self.debug_panel.visible:
@@ -1127,8 +1206,17 @@ class PIPLinkApp:
         self.debug_panel_visible = not self.debug_panel_visible
         self.debug_panel.visible = self.debug_panel_visible
 
+    def on_mouse_move(self, x, y):
+        if self.control_sender and self.control_sender.state == 1:
+            current_time = time.time()
+            dt = current_time - self.last_mouse_update_time
+            self.last_mouse_update_time = current_time
+            self.control_sender.update_mouse_position(x, y, dt)
+            # print(dt)
+
     def mouse_callback(self, event, x, y, flags, param):
         """鼠标事件回调"""
+        # 原有的UI事件处理
         self.root.handle_mouse_event(event, x, y, flags, param)
 
     def run(self):
@@ -1138,11 +1226,16 @@ class PIPLinkApp:
         cv2.setWindowProperty(self.window_name, cv2.WND_PROP_AUTOSIZE, cv2.WINDOW_AUTOSIZE)  # 禁止手动调整
         cv2.setMouseCallback(self.window_name, self.mouse_callback)
 
+
+        self.mouse_tracker.start()
+
         last_time = time.time()
+        self.last_mouse_update_time = last_time  # ===== 新增 =====
 
         print("=== PIP-Link Started ===")
         print(f"Window Size: {self.width}x{self.height}")
         print("Press ESC to toggle debug panel")
+        print("Press F5 to toggle control mode")  # ===== 新增 =====
 
         while True:
             """主循环"""
@@ -1185,11 +1278,35 @@ class PIPLinkApp:
             # 绘制 UI 组件
             self.root.draw(canvas)
 
+            # ===== 新增：更新并绘制状态指示器 =====
+            self.state_indicator.update(dt)
+            self.state_indicator.draw(canvas)
+
             # 显示
             cv2.imshow(self.window_name, canvas)
 
             # 按键处理
-            key = cv2.waitKey(1) & 0xFF
+            key = cv2.waitKey(1)
+
+            if key != -1:
+                print(key)
+            # ===== 新增：F5键处理 (键码196) =====
+
+            if self.control_sender:
+                self.current_state = self.control_sender.state
+                if self.current_state == 1 and self.last_state == 0:  # Ready
+                    # ===== 修复：直接更新StateIndicator =====
+                    self.state_indicator.text = "Ready"
+                    self.state_indicator.color = (0, 255, 0)
+                    self.state_indicator.trigger_animation("Ready", (0, 255, 0))
+                    self.hide_cursor()
+                elif self.current_state == 0 and self.last_state == 1:  # Not Ready
+                    # ===== 修复：直接更新StateIndicator =====
+                    self.state_indicator.text = "Not Ready"
+                    self.state_indicator.color = (100, 100, 255)
+                    self.state_indicator.trigger_animation("Not Ready", (100, 100, 255))
+                    self.show_cursor()
+            self.last_state = self.current_state
 
             if key == 27:  # ESC
                 focused = Object.get_focused_object()
@@ -1218,6 +1335,7 @@ class PIPLinkApp:
         # 清理
         self.stop_udp_receiver()
         self.stop_params_receiver()
+        self.stop_control_sender()  # ===== 新增 =====
         cv2.destroyAllWindows()
 
 
