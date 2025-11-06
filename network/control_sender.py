@@ -33,11 +33,15 @@ class ControlSender:
         self.send_thread = None
 
         # 鼠标状态
-        self.last_mouse_x = 0
-        self.last_mouse_y = 0
+        self.last_mouse_dx = 0
+        self.last_mouse_dy = 0
         self.mouse_velocity_x = 0.0
         self.mouse_velocity_y = 0.0
         self.mouse_lock = threading.Lock()
+
+        # ===== 新增: 灵敏度 =====
+        from core.config import Config
+        self.sensitivity = Config.DEFAULT_SENSITIVITY
 
         # 键盘编码器
         self.keyboard_encoder = KeyboardEncoder()
@@ -112,7 +116,7 @@ class ControlSender:
 
         return self.state
 
-    def update_mouse_position(self, x: int, y: int, dt: float):
+    def update_mouse_position(self, dx: int, dy: int, dt: float):
         """
         更新鼠标位置并计算速度
 
@@ -123,11 +127,32 @@ class ControlSender:
         """
         with self.mouse_lock:
             if dt > 0:
-                self.mouse_velocity_x = (x - self.last_mouse_x) / dt
-                self.mouse_velocity_y = (y - self.last_mouse_y) / dt
+                # 计算原始速度
+                raw_vx = dx / dt
+                raw_vy = dy / dt
 
-            self.last_mouse_x = x
-            self.last_mouse_y = y
+                # ===== 新增: 应用灵敏度和缩放因子 =====
+                from core.config import Config
+
+                # 应用灵敏度和缩放
+                self.mouse_velocity_x = raw_vx * self.sensitivity * Config.MOUSE_SCALE_FACTOR
+                self.mouse_velocity_y = raw_vy * self.sensitivity * Config.MOUSE_SCALE_FACTOR
+
+                # 限幅
+                self.mouse_velocity_x = max(Config.MIN_MOUSE_VELOCITY,
+                                            min(Config.MAX_MOUSE_VELOCITY, self.mouse_velocity_x))
+                self.mouse_velocity_y = max(Config.MIN_MOUSE_VELOCITY,
+                                            min(Config.MAX_MOUSE_VELOCITY, self.mouse_velocity_y))
+
+            self.last_mouse_dx = dx
+            self.last_mouse_dy = dy
+
+    def set_sensitivity(self, sensitivity: float):
+        """设置鼠标灵敏度"""
+        from core.config import Config
+        self.sensitivity = max(Config.MIN_SENSITIVITY,
+                               min(Config.MAX_SENSITIVITY, sensitivity))
+        print(f"[ControlSender] 灵敏度设置为: {self.sensitivity:.2f}")
 
     def _send_loop(self):
         """发送循环 - 100Hz"""

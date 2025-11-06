@@ -3,43 +3,11 @@ import cv2
 import numpy as np
 import time
 import threading
-from pynput import mouse
-import pyautogui
 from core.config import Config
 from core.state import AppState
 from utils.events import EventBus, Events
 from network.manager import NetworkManager
 from ui.manager import UIManager
-
-
-class _MouseTracker:
-    """内部鼠标追踪器"""
-    def __init__(self, on_move=None, poll_interval=0.05):
-        self.on_move_callback = on_move
-        self.poll_interval = poll_interval
-        self._stop_flag = False
-
-    def _on_move_internal(self, x, y):
-        """内部触发:事件监听器调用"""
-        if self.on_move_callback:
-            self.on_move_callback(x, y)
-
-    def _poll_mouse_position(self):
-        """定时轮询鼠标位置"""
-        while not self._stop_flag:
-            x, y = pyautogui.position()
-            if self.on_move_callback:
-                self.on_move_callback(x, y)
-            time.sleep(self.poll_interval)
-
-    def start(self):
-        listener = mouse.Listener(on_move=self._on_move_internal)
-        listener.daemon = True
-        listener.start()
-        threading.Thread(target=self._poll_mouse_position, daemon=True).start()
-
-    def stop(self):
-        self._stop_flag = True
 
 class ApplicationController:
     """应用主控制器"""
@@ -58,7 +26,7 @@ class ApplicationController:
         self.ui = UIManager(self.state, self.event_bus)
 
         # 鼠标追踪
-        self.mouse_tracker = _MouseTracker(on_move=self.on_mouse_move, poll_interval=0.001)
+        self.ignore_next_mouse_event = False  # 添加这行
 
         self._setup_event_handlers()
 
@@ -70,11 +38,10 @@ class ApplicationController:
         # Stream Tab
         self.ui.stream_tab.apply_button.on_click = self._on_apply_quality_click
 
-        # Display Tab - 按钮已在__init__中创建，可以直接绑定
+        # Display Tab
         self.ui.display_tab.windowed_btn.on_click = lambda obj: self._set_window_mode("windowed")
         self.ui.display_tab.fullscreen_btn.on_click = lambda obj: self._set_window_mode("fullscreen")
 
-        # 分辨率按钮也已预创建
         for idx, btn in enumerate(self.ui.display_tab.resolution_buttons):
             btn.on_click = lambda obj, i=idx: self._set_resolution(i)
 
@@ -82,10 +49,22 @@ class ApplicationController:
         self.ui.image_tab.apply_button.on_click = self._on_apply_image_click
         self.ui.image_tab.reset_button.on_click = self._on_reset_image_click
 
+        # ===== 新增: Control Tab =====
+        self.ui.control_tab.apply_button.on_click = self._on_apply_sensitivity_click
+
         self.event_bus.subscribe(Events.CONTROL_STATE_CHANGED, self._on_control_state_changed)
 
         # 让UIManager能访问network
         self.ui.set_network_manager(self.network)
+
+    def _on_apply_sensitivity_click(self, obj):
+        """应用灵敏度设置"""
+        values = self.ui.control_tab.get_input_values()
+        if values and self.network.control:
+            sensitivity = values['sensitivity']
+            self.network.control.set_sensitivity(sensitivity)
+            self.state.control.mouse_sensitivity = sensitivity
+            print(f"[App] 鼠标灵敏度已设置为: {sensitivity:.2f}")
 
     def _on_connect_click(self, obj):
         """连接按钮点击"""
@@ -230,44 +209,61 @@ class ApplicationController:
             self._show_cursor()
 
     def _hide_cursor(self):
-        """隐藏系统光标"""
+        """隐藏系统光标并锁定到窗口中心"""
         if self.state.ui.cursor_hidden:
             return
 
         pygame.mouse.set_visible(False)
+
+        # ===== 新增：锁定鼠标到窗口（防止逃逸）=====
+        pygame.event.set_grab(True)
+
         # 将鼠标移到窗口中心
         pygame.mouse.set_pos(self.window_center)
 
         self.state.ui.cursor_hidden = True
-        print("[Cursor] 光标已隐藏")
+        print("[Cursor] 光标已隐藏并锁定")
 
     def _show_cursor(self):
-        """恢复系统光标"""
+        """恢复系统光标并解除锁定"""
         if not self.state.ui.cursor_hidden:
             return
 
+        # ===== 新增：解除鼠标锁定 =====
+        pygame.event.set_grab(False)
+
         pygame.mouse.set_visible(True)
         self.state.ui.cursor_hidden = False
-        print("[Cursor] 光标已恢复")
+        print("[Cursor] 光标已恢复并解锁")
 
     def on_mouse_move(self, x, y):
-        """鼠标移动"""
-        if self.network.control and self.state.control.state == 1:
-            current_time = time.time()
-            dt = current_time - getattr(self, 'last_mouse_time', current_time)
-            self.last_mouse_time = current_time
+        """鼠标移动 - 只在 Ready 状态下计算速度"""
+        if not (self.network.control and self.state.control.state == 1):
+            return
 
-            # 计算相对中心的速度
-            dx = x - self.window_center[0]
-            dy = y - self.window_center[1]
+        # 跳过重置产生的事件
+        if self.ignore_next_mouse_event:
+            self.ignore_next_mouse_event = False
+            return
 
-            if dt > 0:
-                vx = dx / dt
-                vy = dy / dt
-                self.network.control.update_mouse_position(x, y, dt)
+        current_time = time.time()
+        dt = current_time - getattr(self, 'last_mouse_time', current_time)
+        self.last_mouse_time = current_time
 
-            # 将鼠标重置到中心
-            pygame.mouse.set_pos(self.window_center)
+        # 计算相对中心的位移
+        dx = x - self.window_center[0]
+        dy = y - self.window_center[1]
+
+        if dt > 0:  # 忽略微小抖动
+            vx = dx / dt
+            vy = dy / dt
+            # print(dx)
+            self.network.control.update_mouse_position(x, y, dt)
+
+        # 重置鼠标到中心并设置忽略标志
+        self.ignore_next_mouse_event = True
+        pygame.mouse.set_pos(self.window_center)
+
 
     def run(self):
         """主循环"""
@@ -277,7 +273,6 @@ class ApplicationController:
 
         self.window_center = (self.ui.width // 2, self.ui.height // 2)
 
-        self.mouse_tracker.start()
         last_time = time.time()
 
         # 使用独立的时钟，不限制主循环帧率
@@ -312,7 +307,9 @@ class ApplicationController:
                 elif event.type == pygame.MOUSEBUTTONUP:
                     self.ui.handle_mouse_event(cv2.EVENT_LBUTTONUP, event.pos[0], event.pos[1], 0, None)
                 elif event.type == pygame.MOUSEMOTION:
-                    self.on_mouse_move(event.pos[0], event.pos[1])
+                    # 只在光标隐藏时才处理鼠标移动(Ready状态)
+                    if self.state.ui.cursor_hidden:
+                        self.on_mouse_move(event.rel[0], event.rel[1])
                 elif event.type == pygame.KEYDOWN:
                     key = event.key
                     if key == pygame.K_ESCAPE:
@@ -328,6 +325,18 @@ class ApplicationController:
 
                     if key != -1:
                         self._handle_key(key)
+
+            if self.network.control and self.state.control.state == 1:
+                current_time = time.time()
+                time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
+                # 如果超过 0.05 秒没有鼠标移动事件，归零速度
+                if time_since_last_move > 0.05:
+                    self.network.control.update_mouse_position(
+                        0,
+                        0,
+                        time_since_last_move
+                    )
+                    self.last_mouse_time = current_time
 
             # 创建画布（异步）
             canvas = self._create_canvas()
@@ -373,5 +382,4 @@ class ApplicationController:
     def _cleanup(self):
         """清理资源"""
         self.network.disconnect()
-        self.mouse_tracker.stop()
         pygame.quit()

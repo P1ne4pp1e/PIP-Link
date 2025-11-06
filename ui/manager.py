@@ -15,9 +15,8 @@ from ui.tabs.clients import ClientsTab
 from ui.tabs.statistics import StatisticsTab
 from ui.tabs.display import DisplayTab
 from ui.tabs.image import ImageTab
+from ui.tabs.control import ControlTab
 
-
-# 其他tabs...
 
 class UIManager:
     """UI管理器"""
@@ -40,13 +39,13 @@ class UIManager:
         self.statistics_tab = StatisticsTab(event_bus)
         self.display_tab = DisplayTab(event_bus)
         self.image_tab = ImageTab(event_bus)
+        self.control_tab = ControlTab(event_bus)  # ===== 新增 =====
 
         self._build_ui()
         self._setup_event_listeners()
 
     def _build_ui(self):
         """构建UI"""
-        # 调试面板
         self.debug_panel = TabbedPanel(20, 20, 550, 600, "debug_panel")
         self.debug_panel.add_tab("Connection", self._get_connection_content)
         self.debug_panel.add_tab("Stream", self._get_stream_content)
@@ -54,6 +53,7 @@ class UIManager:
         self.debug_panel.add_tab("Statistics", self._get_statistics_content)
         self.debug_panel.add_tab("Display", self._get_display_content)
         self.debug_panel.add_tab("Image", self._get_image_content)
+        self.debug_panel.add_tab("Control", self._get_control_content)  # ===== 新增 =====
 
         self.root.add_child(self.debug_panel)
 
@@ -123,6 +123,10 @@ class UIManager:
         self.image_tab.update(self.state.server_params.stream_params)
         return self.image_tab.get_components()
 
+    def _get_control_content(self):
+        """获取控制选项卡内容"""
+        self.control_tab.update(self.state.control.mouse_sensitivity)
+        return self.control_tab.get_components()
 
     def _on_connected(self):
         """连接成功"""

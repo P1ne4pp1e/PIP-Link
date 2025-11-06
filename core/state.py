@@ -23,6 +23,7 @@ class ControlState:
     """控制状态"""
     state: int = 0  # 0=Not Ready, 1=Ready
     last_state: int = 0
+    mouse_sensitivity: float = 1.0  # ===== 新增: 鼠标灵敏度 =====
 
 @dataclass
 class VideoState:
