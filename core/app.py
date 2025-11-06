@@ -77,6 +77,8 @@ class ApplicationController:
         self.ui.image_tab.apply_button.on_click = self._on_apply_image_click
         self.ui.image_tab.reset_button.on_click = self._on_reset_image_click
 
+        self.event_bus.subscribe(Events.CONTROL_STATE_CHANGED, self._on_control_state_changed)
+
         # 让UIManager能访问network
         self.ui.set_network_manager(self.network)
 
@@ -211,6 +213,70 @@ class ApplicationController:
                 return True
 
         return True
+
+    def _on_control_state_changed(self, new_state: int):
+        """
+        控制状态改变事件处理
+
+        Args:
+            new_state: 0=Not Ready, 1=Ready
+        """
+        if new_state == 1:  # Ready
+            self._hide_cursor()
+        else:  # Not Ready
+            self._show_cursor()
+
+    def _hide_cursor(self):
+        """隐藏系统光标"""
+        if self.state.ui.cursor_hidden:
+            return  # 已隐藏，不重复操作
+
+        try:
+            import platform
+            system = platform.system()
+
+            if system == 'Windows':
+                import ctypes
+                # 关键：需要调用多次确保计数器 < 0，然后设置光标为NULL
+                while ctypes.windll.user32.ShowCursor(False) >= 0:
+                    pass
+                # 立即设置光标为NULL
+                ctypes.windll.user32.SetCursor(None)
+            elif system == 'Linux':
+                import subprocess
+                try:
+                    subprocess.run(['xdotool', 'mousemove', '0', '0'],
+                                   check=False, timeout=1)
+                except:
+                    pass
+            elif system == 'Darwin':
+                # macOS: 暂时使用移动光标方案
+                pass
+
+            self.state.ui.cursor_hidden = True
+            print("[Cursor] 光标已隐藏")
+        except Exception as e:
+            print(f"[Cursor] 隐藏光标失败: {e}")
+
+    def _show_cursor(self):
+        """恢复系统光标"""
+        if not self.state.ui.cursor_hidden:
+            return  # 已显示，不重复操作
+
+        try:
+            import platform
+            system = platform.system()
+
+            if system == 'Windows':
+                import ctypes
+                # 恢复：调用多次ShowCursor(True)直到计数器 >= 0
+                while ctypes.windll.user32.ShowCursor(True) < 0:
+                    pass
+
+            self.state.ui.cursor_hidden = False
+            print("[Cursor] 光标已恢复")
+        except Exception as e:
+            print(f"[Cursor] 恢复光标失败: {e}")
 
     def on_mouse_move(self, x, y):
         """鼠标移动"""
