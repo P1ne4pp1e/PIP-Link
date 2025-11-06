@@ -8,16 +8,24 @@ from core.state import AppState
 from utils.events import EventBus, Events
 from network.manager import NetworkManager
 from ui.manager import UIManager
+from pygame._sdl2 import Window
 
 class ApplicationController:
     """应用主控制器"""
 
     def __init__(self):
         pygame.init()
+        display_info = pygame.display.Info()
+        self.screen_width = display_info.current_w
+        self.screen_height = display_info.current_h
+        print(f"[Display] 检测到屏幕分辨率: {self.screen_width}x{self.screen_height}")
+
+
         self.screen = None
         self.window_center = (Config.DEFAULT_WIDTH // 2, Config.DEFAULT_HEIGHT // 2)
 
         self.window_name = Config.WINDOW_NAME
+
 
         # 核心组件
         self.state = AppState()
@@ -27,6 +35,7 @@ class ApplicationController:
 
         # 鼠标追踪
         self.ignore_next_mouse_event = False  # 添加这行
+        self.is_switching_mode = False  # ===== 新增：模式切换标志 =====
 
         self._setup_event_handlers()
 
@@ -118,23 +127,40 @@ class ApplicationController:
 
     def _set_window_mode(self, mode: str):
         """设置窗口模式"""
+        print(f"[Display] 准备切换到 {mode} 模式...")
+
+        # ===== 暂时停止渲染 =====
+        self.is_switching_mode = True
+
         self.state.ui.window_mode = mode
 
         if mode == "fullscreen":
             # 保存当前窗口大小
-            self.saved_width = self.ui.width
-            self.saved_height = self.ui.height
+            self.saved_width = self.ui.width if self.ui.width != self.screen_width else self.saved_width
+            self.saved_height = self.ui.height if self.ui.height != self.screen_height else self.saved_height
 
             # 获取屏幕分辨率
-            display_info = pygame.display.Info()
-            width = display_info.current_w
-            height = display_info.current_h
+            width = self.screen_width
+            height = self.screen_height
 
-            # 切换到全屏
-            self.screen = pygame.display.set_mode((width, height), pygame.FULLSCREEN)
-            self.ui.resize(width, height)
-            self.window_center = (width // 2, height // 2)
-        else:
+            try:
+                # 切换到无边框全屏
+                self.screen = pygame.display.set_mode((width, height), pygame.NOFRAME)
+
+                # 移动到左上角
+                self.window.position = (0, 0)
+
+                # 更新UI尺寸
+                self.ui.resize(width, height)
+                self.window_center = (width // 2, height // 2)
+                print(f"[Display] 切换到全屏模式成功: {width}x{height}")
+
+            except Exception as e:
+                print(f"[Display] 切换到全屏失败: {e}")
+                self.is_switching_mode = False
+                return
+
+        else:  # windowed
             # 恢复窗口模式
             if hasattr(self, 'saved_width'):
                 width = self.saved_width
@@ -143,9 +169,24 @@ class ApplicationController:
                 width = Config.DEFAULT_WIDTH
                 height = Config.DEFAULT_HEIGHT
 
-            self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
-            self.ui.resize(width, height)
-            self.window_center = (width // 2, height // 2)
+            try:
+                # 切换回可调整大小窗口
+                self.screen = pygame.display.set_mode((width, height), pygame.RESIZABLE)
+
+                self.window.position = (50, 50)
+
+                # 更新UI尺寸
+                self.ui.resize(width, height)
+                self.window_center = (width // 2, height // 2)
+                print(f"[Display] 切换到窗口模式成功: {width}x{height}")
+
+            except Exception as e:
+                print(f"[Display] 切换到窗口模式失败: {e}")
+                self.is_switching_mode = False
+                return
+
+        # ===== 恢复渲染 =====
+        self.is_switching_mode = False
 
         # 刷新Display选项卡
         self.ui.debug_panel._rebuild_content()
@@ -270,6 +311,7 @@ class ApplicationController:
         # 创建pygame窗口
         self.screen = pygame.display.set_mode((self.ui.width, self.ui.height))
         pygame.display.set_caption(self.window_name)
+        self.window = Window.from_display_module()
 
         self.window_center = (self.ui.width // 2, self.ui.height // 2)
 
@@ -309,7 +351,7 @@ class ApplicationController:
                 elif event.type == pygame.MOUSEMOTION:
                     # 只在光标隐藏时才处理鼠标移动(Ready状态)
                     if self.state.ui.cursor_hidden:
-                        self.on_mouse_move(event.rel[0], event.rel[1])
+                        self.on_mouse_move(event.pos[0], event.pos[1])
                 elif event.type == pygame.KEYDOWN:
                     key = event.key
                     if key == pygame.K_ESCAPE:
@@ -326,36 +368,58 @@ class ApplicationController:
                     if key != -1:
                         self._handle_key(key)
 
+            # ===== 鼠标静止时归零速度 =====
             if self.network.control and self.state.control.state == 1:
                 current_time = time.time()
                 time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
-                # 如果超过 0.05 秒没有鼠标移动事件，归零速度
                 if time_since_last_move > 0.05:
                     self.network.control.update_mouse_position(
-                        0,
-                        0,
-                        time_since_last_move
+                        self.window_center[0],
+                        self.window_center[1],
+                        0.001
                     )
                     self.last_mouse_time = current_time
 
-            # 创建画布（异步）
-            canvas = self._create_canvas()
+            # ===== 如果正在切换模式，跳过渲染 =====
+            if self.is_switching_mode:
+                continue
 
-            # 更新和绘制UI
-            self.ui.update(dt)
-            self.ui.draw(canvas)
+            # ===== 检查窗口是否有效 =====
+            if not self.screen:
+                print("[Render] 窗口无效，跳过本帧")
+                continue
 
-            # 快速转换并显示
             try:
+                # 创建画布
+                canvas = self._create_canvas()
+
+                # 更新和绘制UI
+                self.ui.update(dt)
+                self.ui.draw(canvas)
+
+                # 转换并显示
                 canvas_rgb = cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)
                 canvas_surface = pygame.surfarray.make_surface(canvas_rgb.swapaxes(0, 1))
+
+                # 检查尺寸是否匹配
+                screen_size = self.screen.get_size()
+                canvas_size = (canvas_rgb.shape[1], canvas_rgb.shape[0])
+
+                if screen_size != canvas_size:
+                    print(f"[Render] 尺寸不匹配: screen={screen_size}, canvas={canvas_size}")
+                    continue
+
                 self.screen.blit(canvas_surface, (0, 0))
                 pygame.display.flip()
-            except:
-                pass
 
-            # 不要限制帧率，让主循环尽可能快
-            # clock.tick(60)  # 注释掉这行
+            except pygame.error as e:
+                print(f"[Render] Pygame错误: {e}")
+                # 不要退出，继续下一帧
+            except Exception as e:
+                print(f"[Render] 渲染错误: {e}")
+                import traceback
+                traceback.print_exc()
+
 
         self._cleanup()
 
