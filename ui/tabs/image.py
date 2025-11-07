@@ -39,6 +39,8 @@ class ImageTab:
         self.reset_button.hover_color = (200, 150, 90)
         self.reset_button.font_scale = 0.5
 
+        self.config_manager = None
+
         self._build_static_ui()
 
     def _build_static_ui(self):
@@ -115,6 +117,14 @@ class ImageTab:
             self.contrast_textbox.text = f"{server_contrast:.2f}"
         if not self.gamma_textbox.is_focused and not self.gamma_textbox.text:
             self.gamma_textbox.text = f"{server_gamma:.2f}"
+
+    def set_config(self, config_manager):
+        """设置配置管理器并加载配置"""
+        self.config_manager = config_manager
+        # 加载配置到输入框
+        self.exposure_textbox.text = f"{config_manager.get('image', 'exposure', 1.0):.2f}"
+        self.contrast_textbox.text = f"{config_manager.get('image', 'contrast', 1.0):.2f}"
+        self.gamma_textbox.text = f"{config_manager.get('image', 'gamma', 1.0):.2f}"
 
     def get_components(self):
         return self.components

@@ -13,6 +13,8 @@ class ConnectionTab:
 
     def _build_ui(self):
         """构建UI"""
+        self.config_manager = None
+
         # 状态标签
         self.status_label = Label(10, 10, 510, 25, "Status: Disconnected", "conn_status")
         self.status_label.text_color = (255, 100, 100)
@@ -78,6 +80,13 @@ class ConnectionTab:
             self.duration_label.text = "Duration: --:--:--"
             self.connect_button.text = "Connect"
             self.connect_button.background_color = (70, 130, 180)
+
+    def set_config(self, config_manager):
+        """设置配置管理器并加载配置"""
+        self.config_manager = config_manager
+        # 加载配置到输入框
+        self.ip_textbox.text = config_manager.get('connection', 'server_ip', '192.168.1.100')
+        self.port_textbox.text = config_manager.get('connection', 'server_port', '8888')
 
     def get_components(self):
         """返回UI组件列表"""

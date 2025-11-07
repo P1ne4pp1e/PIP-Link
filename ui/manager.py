@@ -163,6 +163,15 @@ class UIManager:
         """设置网络管理器引用"""
         self.network = network
 
+    def set_config_manager(self, config_manager):
+        """设置配置管理器引用"""
+        self.config_manager = config_manager
+        # 传递给各个选项卡
+        self.connection_tab.set_config(config_manager)
+        self.stream_tab.set_config(config_manager)
+        self.image_tab.set_config(config_manager)
+        self.control_tab.set_config(config_manager)
+
     def update(self, dt: float):
         """更新UI"""
         self.root.update(dt)

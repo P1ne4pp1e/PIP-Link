@@ -1,0 +1,22 @@
+{
+  "connection": {
+    "server_ip": "192.168.137.11",
+    "server_port": "8888"
+  },
+  "stream": {
+    "jpeg_quality": 50,
+    "frame_scale": 1.0
+  },
+  "image": {
+    "exposure": 1.0,
+    "contrast": 1.0,
+    "gamma": 2.0
+  },
+  "control": {
+    "mouse_sensitivity": 1.0
+  },
+  "display": {
+    "window_mode": "windowed",
+    "resolution_index": 6
+  }
+}

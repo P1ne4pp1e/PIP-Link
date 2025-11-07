@@ -23,6 +23,8 @@ class ControlTab:
         self.apply_button.hover_color = (90, 150, 200)
         self.apply_button.font_scale = 0.55
 
+        self.config_manager = None
+
         self._build_static_ui()
 
     def _build_static_ui(self):
@@ -75,7 +77,18 @@ class ControlTab:
 
         # 只在未聚焦且为空时更新输入框
         if not self.sensitivity_textbox.is_focused and not self.sensitivity_textbox.text:
-            self.sensitivity_textbox.text = f"{current_sensitivity:.2f}"
+            if self.config_manager:
+                # 如果有配置管理器,优先使用配置值
+                self.sensitivity_textbox.text = f"{self.config_manager.get('control', 'mouse_sensitivity', current_sensitivity):.2f}"
+            else:
+                self.sensitivity_textbox.text = f"{current_sensitivity:.2f}"
+
+    def set_config(self, config_manager):
+        """设置配置管理器并加载配置"""
+        self.config_manager = config_manager
+        # 加载配置到输入框
+        sensitivity = config_manager.get('control', 'mouse_sensitivity', Config.DEFAULT_SENSITIVITY)
+        self.sensitivity_textbox.text = f"{sensitivity:.2f}"
 
     def get_components(self):
         return self.components

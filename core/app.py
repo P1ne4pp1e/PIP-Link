@@ -7,14 +7,19 @@ from core.config import Config
 from core.state import AppState
 from utils.events import EventBus, Events
 from network.manager import NetworkManager
-from ui.manager import UIManager
 from pygame._sdl2 import Window
+from ui.manager import UIManager
+from utils.config_manager import ConfigManager
 
 class ApplicationController:
     """应用主控制器"""
 
     def __init__(self):
         pygame.init()
+
+        # 配置管理器
+        self.config_manager = ConfigManager()
+
         display_info = pygame.display.Info()
         self.screen_width = display_info.current_w
         self.screen_height = display_info.current_h
@@ -65,6 +70,8 @@ class ApplicationController:
 
         # 让UIManager能访问network
         self.ui.set_network_manager(self.network)
+        # 传递配置管理器给UI
+        self.ui.set_config_manager(self.config_manager)
 
     def _on_apply_sensitivity_click(self, obj):
         """应用灵敏度设置"""
@@ -73,6 +80,8 @@ class ApplicationController:
             sensitivity = values['sensitivity']
             self.network.control.set_sensitivity(sensitivity)
             self.state.control.mouse_sensitivity = sensitivity
+            # 保存控制配置
+            self.config_manager.set('control', 'mouse_sensitivity', sensitivity)
             print(f"[App] 鼠标灵敏度已设置为: {sensitivity:.2f}")
 
     def _on_connect_click(self, obj):
@@ -84,6 +93,9 @@ class ApplicationController:
             if values['ip'] and values['port']:
                 try:
                     port = int(values['port'])
+                    # 保存连接配置
+                    self.config_manager.set('connection', 'server_ip', values['ip'])
+                    self.config_manager.set('connection', 'server_port', values['port'])
                     self.network.connect(values['ip'], port)
                 except ValueError:
                     print("Invalid port")
@@ -99,6 +111,9 @@ class ApplicationController:
                 values['jpeg_quality'],
                 values['frame_scale']
             )
+            # 保存流配置
+            self.config_manager.set('stream', 'jpeg_quality', values['jpeg_quality'])
+            self.config_manager.set('stream', 'frame_scale', values['frame_scale'])
 
     def _on_apply_image_click(self, obj):
         """应用图像调整"""
@@ -112,6 +127,10 @@ class ApplicationController:
                 values['contrast'],
                 values['gamma']
             )
+            # 保存图像配置
+            self.config_manager.set('image', 'exposure', values['exposure'])
+            self.config_manager.set('image', 'contrast', values['contrast'])
+            self.config_manager.set('image', 'gamma', values['gamma'])
 
     def _on_reset_image_click(self, obj):
         """重置图像调整"""
@@ -187,6 +206,8 @@ class ApplicationController:
 
         # ===== 恢复渲染 =====
         self.is_switching_mode = False
+        # 保存显示模式
+        self.config_manager.set('display', 'window_mode', mode)
 
         # 刷新Display选项卡
         self.ui.debug_panel._rebuild_content()
@@ -203,6 +224,9 @@ class ApplicationController:
         self.screen = pygame.display.set_mode((new_width, new_height), pygame.RESIZABLE)
         self.ui.resize(new_width, new_height)
         self.window_center = (new_width // 2, new_height // 2)
+
+        # 保存分辨率索引
+        self.config_manager.set('display', 'resolution_index', index)
 
         print(f"[Display] Resolution changed to {res_name}")
         self.ui.debug_panel._rebuild_content()
@@ -229,6 +253,7 @@ class ApplicationController:
             self.ui.image_tab.exposure_textbox,
             self.ui.image_tab.contrast_textbox,
             self.ui.image_tab.gamma_textbox,
+            self.ui.control_tab.sensitivity_textbox,
         ]
 
         for tb in textboxes:
@@ -411,20 +436,88 @@ class ApplicationController:
                     if self.state.ui.cursor_hidden:
                         self.on_mouse_move(event.pos[0], event.pos[1])
                 elif event.type == pygame.KEYDOWN:
+                    # 直接传递 pygame 的 key 值
                     key = event.key
-                    if key == pygame.K_ESCAPE:
-                        key = 27
-                    elif key == pygame.K_RETURN:
-                        key = 13
-                    elif key == pygame.K_BACKSPACE:
-                        key = 8
+
+                    # 映射特殊键
+                    key_map = {
+                        pygame.K_ESCAPE: 27,
+                        pygame.K_RETURN: 13,
+                        pygame.K_BACKSPACE: 8,
+                        pygame.K_DELETE: 127,
+                        pygame.K_LEFT: 2,
+                        pygame.K_RIGHT: 3,
+                        pygame.K_HOME: 1,
+                        pygame.K_END: 4,
+                    }
+
+                    if key in key_map:
+                        key = key_map[key]
+                    elif 32 <= key <= 126:
+                        pass  # 保持原值
+                    else:
+                        key = -1
+
+                    if key != -1:
+                        # 收集所有TextBox
+                        textboxes = [
+                            self.ui.connection_tab.ip_textbox,
+                            self.ui.connection_tab.port_textbox,
+                            self.ui.stream_tab.jpeg_quality_textbox,
+                            self.ui.stream_tab.frame_scale_textbox,
+                            self.ui.image_tab.exposure_textbox,
+                            self.ui.image_tab.contrast_textbox,
+                            self.ui.image_tab.gamma_textbox,
+                            self.ui.control_tab.sensitivity_textbox,
+                        ]
+
+                        # 检查是否有TextBox处理
+                        handled = False
+                        for tb in textboxes:
+                            if tb.handle_key(key, is_press=True):
+                                handled = True
+                                break
+
+                        # 如果没有TextBox处理，交给_handle_key
+                        if not handled:
+                            self._handle_key(key)
+
+                elif event.type == pygame.KEYUP:
+                    # 处理按键释放
+                    key = event.key
+
+                    key_map = {
+                        pygame.K_ESCAPE: 27,
+                        pygame.K_RETURN: 13,
+                        pygame.K_BACKSPACE: 8,
+                        pygame.K_DELETE: 127,
+                        pygame.K_LEFT: 2,
+                        pygame.K_RIGHT: 3,
+                        pygame.K_HOME: 1,
+                        pygame.K_END: 4,
+                    }
+
+                    if key in key_map:
+                        key = key_map[key]
                     elif 32 <= key <= 126:
                         pass
                     else:
                         key = -1
 
                     if key != -1:
-                        self._handle_key(key)
+                        textboxes = [
+                            self.ui.connection_tab.ip_textbox,
+                            self.ui.connection_tab.port_textbox,
+                            self.ui.stream_tab.jpeg_quality_textbox,
+                            self.ui.stream_tab.frame_scale_textbox,
+                            self.ui.image_tab.exposure_textbox,
+                            self.ui.image_tab.contrast_textbox,
+                            self.ui.image_tab.gamma_textbox,
+                            self.ui.control_tab.sensitivity_textbox,
+                        ]
+
+                        for tb in textboxes:
+                            tb.handle_key(key, is_press=False)
 
             # ===== 鼠标静止时归零速度 =====
             if self.network.control and self.state.control.state == 1:

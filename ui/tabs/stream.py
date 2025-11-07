@@ -25,6 +25,8 @@ class StreamTab:
         self.apply_button.background_color = (70, 130, 180)
         self.apply_button.font_scale = 0.55
 
+        self.config_manager = None
+
         self._build_labels()
 
     def _build_labels(self):
@@ -103,7 +105,11 @@ class StreamTab:
 
         # 更新TextBox默认值
         if not self.jpeg_quality_textbox.is_focused and not self.jpeg_quality_textbox.text:
-            self.jpeg_quality_textbox.text = str(stream_params.jpeg_quality)
+            if self.config_manager:
+                self.jpeg_quality_textbox.text = str(
+                    self.config_manager.get('stream', 'jpeg_quality', stream_params.jpeg_quality))
+            else:
+                self.jpeg_quality_textbox.text = str(stream_params.jpeg_quality)
 
         self.components.append(self.jpeg_quality_textbox)
 
@@ -114,10 +120,17 @@ class StreamTab:
         self.components.append(scale_input_label)
 
         if not self.frame_scale_textbox.is_focused and not self.frame_scale_textbox.text:
-            self.frame_scale_textbox.text = f"{stream_params.frame_scale:.2f}"
+            if self.config_manager:
+                self.frame_scale_textbox.text = f"{self.config_manager.get('stream', 'frame_scale', stream_params.frame_scale):.2f}"
+            else:
+                self.frame_scale_textbox.text = f"{stream_params.frame_scale:.2f}"
 
         self.components.append(self.frame_scale_textbox)
         self.components.append(self.apply_button)
+
+    def set_config(self, config_manager):
+        """设置配置管理器并加载配置"""
+        self.config_manager = config_manager
 
     def get_components(self):
         return self.components
