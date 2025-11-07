@@ -1,6 +1,7 @@
+
+<div align='center'>
 # PIP-Link
 
-<div align="center">
 
 **高性能远程桌面控制系统 - 客户端**
 
@@ -9,7 +10,7 @@
 *基于UDP的低延迟视频流传输 + 100Hz高频控制指令发送*
 
 [特性](https://claude.ai/chat/81d4194f-81b1-48cf-87d5-3217ed7f8065#-特性) • [快速开始](https://claude.ai/chat/81d4194f-81b1-48cf-87d5-3217ed7f8065#-快速开始) • [系统架构](https://claude.ai/chat/81d4194f-81b1-48cf-87d5-3217ed7f8065#-系统架构) • [配置说明](https://claude.ai/chat/81d4194f-81b1-48cf-87d5-3217ed7f8065#️-配置说明) • [开发文档](https://claude.ai/chat/81d4194f-81b1-48cf-87d5-3217ed7f8065#-开发文档)
-
+</div>
 ------
 
 ## 📖 项目简介
@@ -400,3 +401,5 @@ event_bus.publish(Events.CONNECTED)
 **⭐ 如果这个项目对你有帮助，请给个Star! ⭐**
 
 Made with ❤️ for Remote Desktop Control
+
+</div>
