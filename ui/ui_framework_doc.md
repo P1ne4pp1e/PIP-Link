@@ -1,6 +1,5 @@
-# CV2 UI Framework
-
 <div align="center">
+<h1>CV2 UI Framework</h1>
 
 **基于OpenCV的轻量级GUI框架**
 
