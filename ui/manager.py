@@ -47,7 +47,7 @@ class UIManager:
     def _build_ui(self):
         """构建UI"""
         self.debug_panel = TabbedPanel(20, 20, 550, 600, "debug_panel")
-        self.debug_panel.add_tab("Connection", self._get_connection_content)
+        self.debug_panel.add_tab("Connect", self._get_connection_content)
         self.debug_panel.add_tab("Stream", self._get_stream_content)
         self.debug_panel.add_tab("Clients", self._get_clients_content)
         self.debug_panel.add_tab("Statistics", self._get_statistics_content)

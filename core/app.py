@@ -237,6 +237,53 @@ class ApplicationController:
 
         return True
 
+    def _handle_mouse_button(self, button: int, pressed: bool):
+        """处理鼠标按键"""
+        # pygame button: 1=左键, 2=中键, 3=右键, 4=Mouse4, 5=Mouse5
+        button_map = {
+            1: 'left',
+            2: 'middle',
+            3: 'right',
+            4: 'mouse4',
+            5: 'mouse5'
+        }
+
+        if button in button_map:
+            self._update_mouse_state(**{button_map[button]: pressed})
+
+    def _update_mouse_state(self, left=None, right=None, middle=None,
+                            mouse4=None, mouse5=None, scroll_up=False, scroll_down=False):
+        """更新鼠标状态到控制发送器"""
+        if not (self.network.control and self.state.control.state == 1):
+            return
+
+        # 获取当前状态
+        current = getattr(self, '_mouse_button_state', {
+            'left': False, 'right': False, 'middle': False,
+            'mouse4': False, 'mouse5': False
+        })
+
+        # 更新状态
+        if left is not None:
+            current['left'] = left
+        if right is not None:
+            current['right'] = right
+        if middle is not None:
+            current['middle'] = middle
+        if mouse4 is not None:
+            current['mouse4'] = mouse4
+        if mouse5 is not None:
+            current['mouse5'] = mouse5
+
+        self._mouse_button_state = current
+
+        # 发送更新
+        self.network.control.update_mouse_buttons(
+            current['left'], current['right'], current['middle'],
+            current['mouse4'], current['mouse5'],
+            scroll_up, scroll_down
+        )
+
     def _on_control_state_changed(self, new_state: int):
         """
         控制状态改变事件处理
@@ -299,7 +346,7 @@ class ApplicationController:
             vx = dx / dt
             vy = dy / dt
             # print(dx)
-            self.network.control.update_mouse_position(x, y, dt)
+            self.network.control.update_mouse_position(dx, dy, dt)
 
         # 重置鼠标到中心并设置忽略标志
         self.ignore_next_mouse_event = True
@@ -346,8 +393,19 @@ class ApplicationController:
                     self.window_center = (event.w // 2, event.h // 2)
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     self.ui.handle_mouse_event(cv2.EVENT_LBUTTONDOWN, event.pos[0], event.pos[1], 0, None)
+                    if self.state.control.state == 1 and self.network.control:
+                        self._handle_mouse_button(event.button, True)
                 elif event.type == pygame.MOUSEBUTTONUP:
                     self.ui.handle_mouse_event(cv2.EVENT_LBUTTONUP, event.pos[0], event.pos[1], 0, None)
+                    if self.state.control.state == 1 and self.network.control:
+                        self._handle_mouse_button(event.button, False)
+                elif event.type == pygame.MOUSEWHEEL:
+                    # ===== 新增: 滚轮事件 =====
+                    if self.state.control.state == 1 and self.network.control:
+                        self.last_wheel_time = current_time
+                        scroll_up = event.y > 0
+                        scroll_down = event.y < 0
+                        self._update_mouse_state(scroll_up=scroll_up, scroll_down=scroll_down)
                 elif event.type == pygame.MOUSEMOTION:
                     # 只在光标隐藏时才处理鼠标移动(Ready状态)
                     if self.state.ui.cursor_hidden:
@@ -374,10 +432,16 @@ class ApplicationController:
                 time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
                 if time_since_last_move > 0.05:
                     self.network.control.update_mouse_position(
-                        self.window_center[0],
-                        self.window_center[1],
+                        0,
+                        0,
                         0.001
                     )
+                    self.last_mouse_time = current_time
+
+
+                time_since_last_wheel_move = current_time - getattr(self, 'last_wheel_time', current_time)
+                if time_since_last_wheel_move > 0.05:
+                    self._update_mouse_state(scroll_up=False, scroll_down=False)
                     self.last_mouse_time = current_time
 
             # ===== 如果正在切换模式，跳过渲染 =====

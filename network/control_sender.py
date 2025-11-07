@@ -39,6 +39,8 @@ class ControlSender:
         self.mouse_velocity_y = 0.0
         self.mouse_lock = threading.Lock()
 
+        self.mouse_buttons = bytearray(2)  # 2字节存储按键状态
+
         # ===== 新增: 灵敏度 =====
         from core.config import Config
         self.sensitivity = Config.DEFAULT_SENSITIVITY
@@ -147,6 +149,38 @@ class ControlSender:
             self.last_mouse_dx = dx
             self.last_mouse_dy = dy
 
+    def update_mouse_buttons(self, left: bool, right: bool, middle: bool,
+                             mouse4: bool, mouse5: bool, scroll_up: bool, scroll_down: bool):
+        """
+        更新鼠标按键状态
+
+        Byte 0 (bit 0-7):
+          bit 0: 左键
+          bit 1: 右键
+          bit 2: 中键
+          bit 3: Mouse4(侧键后)
+          bit 4: Mouse5(侧键前)
+          bit 5: 滚轮向上
+          bit 6: 滚轮向下
+          bit 7: 保留
+        """
+        with self.mouse_lock:
+            self.mouse_buttons[0] = 0
+            if left:
+                self.mouse_buttons[0] |= (1 << 0)
+            if right:
+                self.mouse_buttons[0] |= (1 << 1)
+            if middle:
+                self.mouse_buttons[0] |= (1 << 2)
+            if mouse4:
+                self.mouse_buttons[0] |= (1 << 3)
+            if mouse5:
+                self.mouse_buttons[0] |= (1 << 4)
+            if scroll_up:
+                self.mouse_buttons[0] |= (1 << 5)
+            if scroll_down:
+                self.mouse_buttons[0] |= (1 << 6)
+
     def set_sensitivity(self, sensitivity: float):
         """设置鼠标灵敏度"""
         from core.config import Config
@@ -169,6 +203,7 @@ class ControlSender:
                 with self.mouse_lock:
                     mouse_vx = self.mouse_velocity_x
                     mouse_vy = self.mouse_velocity_y
+                    mouse_buttons = bytes(self.mouse_buttons)  # 新增
 
                 keyboard_state = self.keyboard_encoder.get_state()
 
@@ -177,6 +212,7 @@ class ControlSender:
                     self.state,
                     mouse_vx,
                     mouse_vy,
+                    mouse_buttons,  # 新增
                     keyboard_state,
                     self.packet_seq
                 )

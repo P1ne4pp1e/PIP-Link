@@ -11,12 +11,12 @@ class ControlPacket:
 
     MAGIC = b'CTRL'
     HEADER_SIZE = 20
-    DATA_SIZE = 20  # 鼠标速度(8) + 键盘状态(10) + 保留(2)
-    TOTAL_SIZE = 40
+    DATA_SIZE = 22  # 鼠标速度(8) + 鼠标按键(2) + 键盘状态(10) + 保留(2)
+    TOTAL_SIZE = 42  # 从40改为42
 
     @staticmethod
     def encode(state: int, mouse_vx: float, mouse_vy: float,
-               keyboard_state: bytes, seq: int) -> bytes:
+               mouse_buttons: bytes, keyboard_state: bytes, seq: int) -> bytes:
         """
         编码控制包
 
@@ -46,6 +46,7 @@ class ControlPacket:
             data = (
                     struct.pack('!f', mouse_vx) +  # 4字节
                     struct.pack('!f', mouse_vy) +  # 4字节
+                    mouse_buttons +  # 2字节 (新增)
                     keyboard_state +  # 10字节
                     bytes(2)  # 2字节对齐
             )
@@ -87,12 +88,14 @@ class ControlPacket:
             'state': state,
             'mouse_vx': 0.0,
             'mouse_vy': 0.0,
+            'mouse_buttons': bytes(2),  # 新增
             'keyboard_state': bytes(10)
         }
 
         if state == 1 and len(packet) >= ControlPacket.TOTAL_SIZE:
             result['mouse_vx'] = struct.unpack('!f', packet[20:24])[0]
             result['mouse_vy'] = struct.unpack('!f', packet[24:28])[0]
-            result['keyboard_state'] = packet[28:38]
+            result['mouse_buttons'] = packet[28:30]  # 新增
+            result['keyboard_state'] = packet[30:40]  # 从28:38改为30:40
 
         return result
