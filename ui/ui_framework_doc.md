@@ -7,6 +7,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)[![OpenCV](https://img.shields.io/badge/OpenCV-4.8+-green.svg)](https://opencv.org/)[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 *纯Python实现，无需Qt/Tkinter等重型GUI库*
+</div>  
 
 ---
 
@@ -1273,4 +1274,5 @@ class ScrollPanel(Panel):
 <div align="center">
 **📘 更多信息请参考 [PIP-Link项目文档](../README.md)**
 
-Made with ❤️ for Computer Vision Applications
+Made with ❤️ for Computer Vision Applications  
+</div>
