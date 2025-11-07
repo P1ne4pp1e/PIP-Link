@@ -1,8 +1,27 @@
-.idea
-
+# Python
+*.pyc
 __pycache__
 core/__pycache__
 network/__pycache__
 ui/components/__pycache__
 ui/tabs/__pycache__
 utils/__pycache__
+*.egg-info/
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# pyinstaller
+installer
+version_info.txt
+installer.iss
+*.spec
+PIP-Link.spec

@@ -20,6 +20,10 @@ class ApplicationController:
         # 配置管理器
         self.config_manager = ConfigManager()
 
+        self.icon_img = pygame.image.load("assets/icon.ico")
+        self.icon_img.set_colorkey((255, 255, 255))
+        pygame.display.set_icon(self.icon_img)  # 可以填img
+
         display_info = pygame.display.Info()
         self.screen_width = display_info.current_w
         self.screen_height = display_info.current_h
