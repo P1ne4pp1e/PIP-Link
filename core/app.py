@@ -527,7 +527,7 @@ class ApplicationController:
             if self.network.control and self.state.control.state == 1:
                 current_time = time.time()
                 time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
-                if time_since_last_move > 0.05:
+                if time_since_last_move > 0.15:  # 增加到150ms，防止慢速移动时误判
                     self.network.control.update_mouse_position(
                         0,
                         0,
@@ -537,7 +537,7 @@ class ApplicationController:
 
 
                 time_since_last_wheel_move = current_time - getattr(self, 'last_wheel_time', current_time)
-                if time_since_last_wheel_move > 0.05:
+                if time_since_last_wheel_move > 0.15:  # 滚轮也同步增加到150ms
                     self._update_mouse_state(scroll_up=False, scroll_down=False)
                     self.last_mouse_time = current_time
 
