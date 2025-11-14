@@ -527,7 +527,7 @@ class ApplicationController:
             if self.network.control and self.state.control.state == 1:
                 current_time = time.time()
                 time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
-                if time_since_last_move > 0.05:
+                if time_since_last_move > 0.15:
                     self.network.control.update_mouse_position(
                         0,
                         0,
