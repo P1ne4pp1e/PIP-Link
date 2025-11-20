@@ -22,11 +22,11 @@ class Config:
 
     # 鼠标灵敏度范围
     MIN_SENSITIVITY = 0.1
-    MAX_SENSITIVITY = 5.0
+    MAX_SENSITIVITY = 10.0
     DEFAULT_SENSITIVITY = 1.0
 
     # 鼠标速度缩放因子(固定,用户不可修改)
-    MOUSE_SCALE_FACTOR = 0.01
+    MOUSE_SCALE_FACTOR = 0.4
 
     # 鼠标速度限幅(像素/秒)
     MAX_MOUSE_VELOCITY = 720.0

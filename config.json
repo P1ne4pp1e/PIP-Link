@@ -1,6 +1,6 @@
 {
   "connection": {
-    "server_ip": "192.168.137.11",
+    "server_ip": "192.168.1.33",
     "server_port": "8888"
   },
   "stream": {
@@ -8,15 +8,15 @@
     "frame_scale": 0.8
   },
   "image": {
-    "exposure": 1.0,
+    "exposure": 1.5,
     "contrast": 1.0,
-    "gamma": 2.0
+    "gamma": 2.5
   },
   "control": {
     "mouse_sensitivity": 1.0
   },
   "display": {
     "window_mode": "windowed",
-    "resolution_index": 6
+    "resolution_index": 4
   }
 }
