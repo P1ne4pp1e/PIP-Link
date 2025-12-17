@@ -41,7 +41,7 @@ class ControlTab:
         self.current_label.font_scale = 0.45
 
         self.sens_label = Label(10, 90, 490, 20,
-                                f"Sensitivity ({Config.MIN_SENSITIVITY:.1f}-{Config.MAX_SENSITIVITY:.1f}):",
+                                f"Sensitivity ({Config.MIN_SENSITIVITY:.2f}-{Config.MAX_SENSITIVITY:.2f}):",
                                 "sens_label")
         self.sens_label.text_color = (200, 200, 200)
         self.sens_label.background_color = (45, 45, 52)

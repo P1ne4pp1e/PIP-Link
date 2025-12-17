@@ -43,7 +43,6 @@ class ApplicationController:
         self.ui = UIManager(self.state, self.event_bus)
 
         # 鼠标追踪
-        self.ignore_next_mouse_event = False  # 添加这行
         self.is_switching_mode = False  # ===== 新增：模式切换标志 =====
 
         self._setup_event_handlers()
@@ -353,34 +352,6 @@ class ApplicationController:
         self.state.ui.cursor_hidden = False
         print("[Cursor] 光标已恢复并解锁")
 
-    def on_mouse_move(self, x, y):
-        """鼠标移动 - 只在 Ready 状态下计算速度"""
-        if not (self.network.control and self.state.control.state == 1):
-            return
-
-        # 跳过重置产生的事件
-        if self.ignore_next_mouse_event:
-            self.ignore_next_mouse_event = False
-            return
-
-        current_time = time.time()
-        dt = current_time - getattr(self, 'last_mouse_time', current_time)
-        self.last_mouse_time = current_time
-
-        # 计算相对中心的位移
-        dx = x - self.window_center[0]
-        dy = y - self.window_center[1]
-
-        if dt > 0:  # 忽略微小抖动
-            vx = dx / dt
-            vy = dy / dt
-            # print(dx)
-            self.network.control.update_mouse_position(dx, dy, dt)
-
-        # 重置鼠标到中心并设置忽略标志
-        self.ignore_next_mouse_event = True
-        pygame.mouse.set_pos(self.window_center)
-
 
     def run(self):
         """主循环"""
@@ -435,10 +406,6 @@ class ApplicationController:
                         scroll_up = event.y > 0
                         scroll_down = event.y < 0
                         self._update_mouse_state(scroll_up=scroll_up, scroll_down=scroll_down)
-                elif event.type == pygame.MOUSEMOTION:
-                    # 只在光标隐藏时才处理鼠标移动(Ready状态)
-                    if self.state.ui.cursor_hidden:
-                        self.on_mouse_move(event.pos[0], event.pos[1])
                 elif event.type == pygame.KEYDOWN:
                     # 直接传递 pygame 的 key 值
                     key = event.key
@@ -526,20 +493,35 @@ class ApplicationController:
             # ===== 鼠标静止时归零速度 =====
             if self.network.control and self.state.control.state == 1:
                 current_time = time.time()
-                time_since_last_move = current_time - getattr(self, 'last_mouse_time', current_time)
-                if time_since_last_move > 0.15:
-                    self.network.control.update_mouse_position(
-                        0,
-                        0,
-                        0.001
-                    )
-                    self.last_mouse_time = current_time
+                dt = current_time - getattr(self, 'last_mouse_calc_time', current_time)
+                self.last_mouse_calc_time = current_time
 
+                # 获取当前鼠标位置
+                mouse_x, mouse_y = pygame.mouse.get_pos()
 
+                # 计算相对中心的位移
+                dx = mouse_x - self.window_center[0]
+                dy = mouse_y - self.window_center[1]
+
+                # 只有在有实际位移时才发送
+                if abs(dx) > 0 or abs(dy) > 0:
+                    if dt > 0:
+                        self.network.control.update_mouse_position(dx, dy, dt)
+
+                    # 立即归中
+                    pygame.mouse.set_pos(self.window_center)
+                else:
+                    # 无位移时发送零速度
+                    if dt > 0:
+                        self.network.control.update_mouse_position(0, 0, dt)
+
+            # 处理滚轮归零(保留原逻辑)
+            if self.network.control and self.state.control.state == 1:
+                current_time = time.time()
                 time_since_last_wheel_move = current_time - getattr(self, 'last_wheel_time', current_time)
                 if time_since_last_wheel_move > 0.05:
                     self._update_mouse_state(scroll_up=False, scroll_down=False)
-                    self.last_mouse_time = current_time
+                    self.last_wheel_time = current_time
 
             # ===== 如果正在切换模式，跳过渲染 =====
             if self.is_switching_mode:
