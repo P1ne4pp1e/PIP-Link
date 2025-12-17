@@ -13,8 +13,8 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_TOKEN }}
         run: |
           # 获取源仓库的所有 releases
-          SOURCE_REPO="P1ne4pp1e/PIP_Link"
-          TARGET_REPO="PIP-AlgorithmGroup/PIP_Link"
+          SOURCE_REPO="P1ne4pp1e/PIP-Link"
+          TARGET_REPO="PIP-AlgorithmGroup/PIP-Link"
           
           echo "Getting all releases from $SOURCE_REPO..."
           RELEASES=$(gh release list --repo "$SOURCE_REPO" --limit 100 --json tagName,name,isPrerelease,isDraft)

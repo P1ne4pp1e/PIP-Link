@@ -33,7 +33,7 @@ jobs:
             git commit -m "Temporarily remove sync release workflow"
           fi
           
-          git remote add backup https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/PIP-AlgorithmGroup/PIP_Link.git
+          git remote add backup https://x-access-token:${{ secrets.SYNC_TOKEN }}@github.com/PIP-AlgorithmGroup/PIP-Link.git
           git push backup --all --force
           git push backup --tags --force
           
@@ -56,12 +56,12 @@ jobs:
           [ "$IS_DRAFT" = "true" ] && OPTS="$OPTS --draft"
           
           gh release create "$TAG_NAME" \
-            --repo "PIP-AlgorithmGroup/PIP_Link" \
+            --repo "PIP-AlgorithmGroup/PIP-Link" \
             --title "$RELEASE_NAME" \
             --notes "$RELEASE_BODY" \
             $OPTS 2>/dev/null || \
           gh release edit "$TAG_NAME" \
-            --repo "PIP-AlgorithmGroup/PIP_Link" \
+            --repo "PIP-AlgorithmGroup/PIP-Link" \
             --title "$RELEASE_NAME" \
             --notes "$RELEASE_BODY"
 
@@ -72,10 +72,10 @@ jobs:
         run: |
           TAG_NAME="${{ github.event.release.tag_name }}"
           
-          gh release download "$TAG_NAME" --repo "P1ne4pp1e/PIP_Link" -D /tmp/assets || true
+          gh release download "$TAG_NAME" --repo "P1ne4pp1e/PIP-Link" -D /tmp/assets || true
           
           if ls /tmp/assets/* 1> /dev/null 2>&1; then
             gh release upload "$TAG_NAME" /tmp/assets/* \
-              --repo "PIP-AlgorithmGroup/PIP_Link" \
+              --repo "PIP-AlgorithmGroup/PIP-Link" \
               --clobber
           fi
