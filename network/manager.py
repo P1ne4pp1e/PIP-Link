@@ -93,6 +93,12 @@ class NetworkManager:
             if 0 < latency < 5.0:
                 self.state.video.latency_ms = latency * 1000
 
+        # if hasattr(stream_params, 'camera_fov'):
+        #     self.state.control.current_fov = stream_params.camera_fov
+        #     if self.control:
+        #         self.control.set_fov(stream_params.camera_fov)
+        #     print(f"[Network] 服务端FOV已更新: {stream_params.camera_fov:.1f}°")
+
         self.event_bus.publish(Events.PARAMS_RECEIVED, stream_params, clients)
 
     def disconnect(self):

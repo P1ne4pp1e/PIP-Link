@@ -23,6 +23,11 @@ class ControlTab:
         self.apply_button.hover_color = (90, 150, 200)
         self.apply_button.font_scale = 0.55
 
+        self.fov_display_label = Label(10, 335, 510, 25, "", "fov_display")
+        self.fov_display_label.text_color = (150, 200, 255)
+        self.fov_display_label.background_color = (45, 45, 52)
+        self.fov_display_label.font_scale = 0.45
+
         self.config_manager = None
 
         self._build_static_ui()
@@ -50,15 +55,16 @@ class ControlTab:
         self.info_label = Label(10, 220, 510, 100,
                                 f"Current Settings:\n"
                                 f"- Scale Factor: {Config.MOUSE_SCALE_FACTOR:.2f} (fixed)\n"
-                                f"- Velocity Limit: {Config.MIN_MOUSE_VELOCITY:.0f} ~ {Config.MAX_MOUSE_VELOCITY:.0f} px/s\n\n"
-                                f"Final velocity = raw_vel * sensitivity * scale_factor",
+                                f"- Base m_yaw: {Config.M_YAW} (CS2 standard)\n"
+                                f"- Velocity Limit (abs): {Config.MAX_MOUSE_VELOCITY:.0f} px/s\n\n"
+                                f"Final velocity = raw * sensitivity * scale * (FOV/60)",
                                 "control_info")
         self.info_label.text_color = (150, 150, 155)
         self.info_label.background_color = (45, 45, 52)
         self.info_label.font_scale = 0.4
         self.info_label.valign = "top"
 
-    def update(self, current_sensitivity):
+    def update(self, current_sensitivity, current_fov=90.0):
         """更新显示"""
         self.components = []
 
@@ -69,11 +75,15 @@ class ControlTab:
             self.sens_label,
             self.sensitivity_textbox,
             self.apply_button,
-            self.info_label
+            self.info_label,
+            self.fov_display_label
         ])
 
         # 更新当前灵敏度显示
         self.current_label.text = f"Current Sensitivity: {current_sensitivity:.2f}"
+
+        fov_multiplier = current_fov / 60.0
+        self.fov_display_label.text = f"Current FOV: {current_fov:.1f}deg (multiplier: {fov_multiplier:.3f})"
 
         # 只在未聚焦且为空时更新输入框
         if not self.sensitivity_textbox.is_focused and not self.sensitivity_textbox.text:

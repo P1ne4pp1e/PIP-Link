@@ -2,6 +2,9 @@ from dataclasses import dataclass
 from typing import Optional
 import numpy as np
 
+from core.config import Config
+
+
 @dataclass
 class ConnectionState:
     """连接状态"""
@@ -23,7 +26,8 @@ class ControlState:
     """控制状态"""
     state: int = 0  # 0=Not Ready, 1=Ready
     last_state: int = 0
-    mouse_sensitivity: float = 1.0  # ===== 新增: 鼠标灵敏度 =====
+    mouse_sensitivity: float = 1.0
+    current_fov: float = 90.0
 
 @dataclass
 class VideoState:
@@ -47,3 +51,5 @@ class AppState:
         self.control = ControlState()
         self.video = VideoState()
         self.server_params = ServerParams()
+
+        self.control.current_fov = Config.DEFAULT_FOV

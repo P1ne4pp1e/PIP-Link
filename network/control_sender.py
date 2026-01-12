@@ -54,6 +54,8 @@ class ControlSender:
         self.total_packets_sent = 0
         self.actual_rate = 0.0
 
+        self.current_fov = Config.DEFAULT_FOV
+
     def start(self, server_ip: str, tcp_port: int):
         """
         启动控制发送器
@@ -120,11 +122,11 @@ class ControlSender:
 
     def update_mouse_position(self, dx: int, dy: int, dt: float):
         """
-        更新鼠标位置并计算速度
+        更新鼠标位置并计算速度(考虑FOV)
 
         Args:
-            x: 鼠标X坐标
-            y: 鼠标Y坐标
+            dx: 鼠标X位移
+            dy: 鼠标Y位移
             dt: 时间间隔 (秒)
         """
         with self.mouse_lock:
@@ -133,12 +135,14 @@ class ControlSender:
                 raw_vx = dx / dt
                 raw_vy = dy / dt
 
-                # ===== 新增: 应用灵敏度和缩放因子 =====
                 from core.config import Config
 
-                # 应用灵敏度和缩放
-                self.mouse_velocity_x = raw_vx * self.sensitivity * Config.MOUSE_SCALE_FACTOR
-                self.mouse_velocity_y = raw_vy * self.sensitivity * Config.MOUSE_SCALE_FACTOR
+                # ===== 新增: FOV校正 =====
+                fov_multiplier = self.current_fov / 60.0
+
+                # 应用灵敏度、缩放因子和FOV校正
+                self.mouse_velocity_x = raw_vx * self.sensitivity * Config.MOUSE_SCALE_FACTOR * fov_multiplier * Config.M_YAW
+                self.mouse_velocity_y = raw_vy * self.sensitivity * Config.MOUSE_SCALE_FACTOR * fov_multiplier * Config.M_PITCH
 
                 # 限幅
                 self.mouse_velocity_x = max(Config.MIN_MOUSE_VELOCITY,
@@ -187,6 +191,12 @@ class ControlSender:
         self.sensitivity = max(Config.MIN_SENSITIVITY,
                                min(Config.MAX_SENSITIVITY, sensitivity))
         print(f"[ControlSender] 灵敏度设置为: {self.sensitivity:.2f}")
+
+    def set_fov(self, fov: float):
+        """设置FOV"""
+        from core.config import Config
+        self.current_fov = max(Config.MIN_FOV, min(Config.MAX_FOV, fov))
+        print(f"[ControlSender] FOV设置为: {self.current_fov:.1f}°")
 
     def _send_loop(self):
         """发送循环 - 100Hz"""

@@ -20,7 +20,7 @@ class ApplicationController:
         # 配置管理器
         self.config_manager = ConfigManager()
 
-        self.icon_img = pygame.image.load("assets/icon.ico")
+        self.icon_img = pygame.image.load("assets/icon.png")
         self.icon_img.set_colorkey((255, 255, 255))
         pygame.display.set_icon(self.icon_img)  # 可以填img
 
@@ -86,6 +86,9 @@ class ApplicationController:
             # 保存控制配置
             self.config_manager.set('control', 'mouse_sensitivity', sensitivity)
             print(f"[App] 鼠标灵敏度已设置为: {sensitivity:.2f}")
+
+            # ===== 新增: 同时应用当前FOV =====
+            self.network.control.set_fov(self.state.control.current_fov)
 
     def _on_connect_click(self, obj):
         """连接按钮点击"""

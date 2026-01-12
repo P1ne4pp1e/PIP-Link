@@ -26,11 +26,20 @@ class Config:
     DEFAULT_SENSITIVITY = 1.0
 
     # 鼠标速度缩放因子(固定,用户不可修改)
-    MOUSE_SCALE_FACTOR = 0.4
+    MOUSE_SCALE_FACTOR = 1.0
 
     # 鼠标速度限幅(像素/秒)
     MAX_MOUSE_VELOCITY = 3600.0
     MIN_MOUSE_VELOCITY = -3600.0
+
+    # ===== 新增: FOV配置 =====
+    DEFAULT_FOV = 46.51  # 默认FOV(度)
+    MIN_FOV = 30.0
+    MAX_FOV = 120.0
+
+    # CS2经典yaw值
+    M_YAW = 0.0165
+    M_PITCH = 0.022
 
     # 分辨率列表
     AVAILABLE_RESOLUTIONS = [

@@ -24,6 +24,7 @@ class StreamParams:
     exposure: float = 1.0
     contrast: float = 1.0
     gamma: float = 1.0
+    # camera_fov: float = 90.0
 
 
 @dataclass

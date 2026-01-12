@@ -125,7 +125,10 @@ class UIManager:
 
     def _get_control_content(self):
         """获取控制选项卡内容"""
-        self.control_tab.update(self.state.control.mouse_sensitivity)
+        self.control_tab.update(
+            self.state.control.mouse_sensitivity,
+            self.state.control.current_fov  # ===== 新增: 传递FOV =====
+        )
         return self.control_tab.get_components()
 
     def _on_connected(self):
