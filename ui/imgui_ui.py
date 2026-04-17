@@ -59,8 +59,8 @@ class ImGuiUI:
         imgui.set_next_window_position(center_x, center_y, imgui.ALWAYS)
         imgui.set_next_window_size(menu_width, menu_height, imgui.ALWAYS)
 
-        # No close button (False), no move/resize
-        expanded, opened = imgui.begin("REMOTE CONTROL", False, imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_RESIZE)
+        # No title bar, no close button, no move/resize
+        expanded, opened = imgui.begin("REMOTE CONTROL", False, imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_RESIZE)
 
         if expanded:
             # Tab bar with better styling

@@ -36,11 +36,10 @@ class Application:
 
         # Initialize ImGui
         imgui.create_context()
-        self.imgui_renderer = PygameRenderer()
         io = imgui.get_io()
         io.display_size = (Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
 
-        # Load font with larger size
+        # Load font BEFORE renderer initialization
         try:
             # Try bold variant first for better visibility
             io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeuib.ttf", Config.FONT_SIZE)
@@ -57,6 +56,9 @@ class Application:
                     print("[App] Loaded Microsoft YaHei font")
                 except:
                     print("[App] Using default font")
+
+        # Initialize renderer AFTER font loading
+        self.imgui_renderer = PygameRenderer()
 
         # Components
         self.session = SessionManager()
