@@ -8,7 +8,7 @@ class Config:
     FULLSCREEN = False
 
     # Font config
-    FONT_SIZE = 22
+    FONT_SIZE = 18
     FONT_PATH = "C:\\Windows\\Fonts\\segoeui.ttf"  # Segoe UI looks better than msyh
 
     # Network config
