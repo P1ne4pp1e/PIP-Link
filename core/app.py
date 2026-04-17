@@ -39,23 +39,29 @@ class Application:
         io = imgui.get_io()
         io.display_size = (Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
 
-        # Load font BEFORE renderer initialization
+        # Load fonts BEFORE renderer initialization
+        self.fonts = {}
         try:
-            # Try bold variant first for better visibility
-            io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeuib.ttf", Config.FONT_SIZE)
-            print("[App] Loaded Segoe UI Bold font")
+            # Title font - larger, bold
+            self.fonts['title'] = io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\calibrib.ttf", 28)
+            print("[App] Loaded Calibri Bold for titles")
         except:
             try:
-                # Fallback to regular Segoe UI
-                io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeui.ttf", Config.FONT_SIZE)
-                print("[App] Loaded Segoe UI font")
+                self.fonts['title'] = io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\arialbd.ttf", 28)
+                print("[App] Loaded Arial Bold for titles")
             except:
-                try:
-                    # Fallback to Chinese font
-                    io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\msyh.ttc", Config.FONT_SIZE, io.fonts.get_glyph_ranges_chinese_simplified())
-                    print("[App] Loaded Microsoft YaHei font")
-                except:
-                    print("[App] Using default font")
+                print("[App] Using default font for titles")
+
+        try:
+            # Content font - regular, clean
+            self.fonts['content'] = io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\consola.ttf", 18)
+            print("[App] Loaded Consolas for content")
+        except:
+            try:
+                self.fonts['content'] = io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeui.ttf", 18)
+                print("[App] Loaded Segoe UI for content")
+            except:
+                print("[App] Using default font for content")
 
         # Initialize renderer AFTER font loading
         self.imgui_renderer = PygameRenderer()
@@ -64,7 +70,7 @@ class Application:
         self.session = SessionManager()
         self.video_renderer = VideoRenderer(Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
         self.video_renderer.init_texture()
-        self.imgui_ui = ImGuiUI()
+        self.imgui_ui = ImGuiUI(fonts=self.fonts)
         self.input_handler = InputHandler()
         self.input_mapper = InputMapper()
         self.param_manager = ParamManager()
