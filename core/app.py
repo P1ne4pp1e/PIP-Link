@@ -67,6 +67,10 @@ class Application:
         # Hide cursor initially (game mode)
         pygame.mouse.set_visible(False)
 
+        # Initialize menu animation time
+        import time
+        self.imgui_ui.menu_open_time = time.time()
+
         # Set callbacks
         self.session.on_state_changed = self._on_session_state_changed
         self.input_handler.on_toggle_menu = self._on_toggle_menu
@@ -78,6 +82,7 @@ class Application:
     def _on_toggle_menu(self):
         """Toggle menu"""
         self.imgui_ui.show_menu = not self.imgui_ui.show_menu
+        self.imgui_ui.menu_open_time = time.time()
         # Show mouse cursor when menu opens, hide when closes
         pygame.mouse.set_visible(self.imgui_ui.show_menu)
 
