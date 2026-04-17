@@ -11,11 +11,11 @@ class ImGuiUI:
 
     def __init__(self):
         self.show_menu = False
-        self.show_params = False
+        self.current_tab = 0  # 0: Connection, 1: Parameters, 2: Settings
         Theme.apply(imgui)
 
     def draw_menu(self, session_state: str, callbacks: Dict[str, Callable]) -> bool:
-        """Draw menu
+        """Draw tabbed menu
 
         Args:
             session_state: Session state string
@@ -25,44 +25,30 @@ class ImGuiUI:
             running status
         """
         imgui.set_next_window_position(20, 20, imgui.ALWAYS)
-        imgui.set_next_window_size(300, 250, imgui.ALWAYS)
+        imgui.set_next_window_size(400, 350, imgui.ALWAYS)
 
         expanded, opened = imgui.begin("Menu", True)
         running = True
 
         if expanded:
-            # State indicator
-            self._draw_state_indicator(session_state)
-            imgui.same_line()
-            imgui.text(f"State: {session_state}")
+            # Tab bar
+            if imgui.begin_tab_bar("MenuTabs"):
+                # Connection tab
+                if imgui.begin_tab_item("Connection")[0]:
+                    self._draw_connection_tab(session_state, callbacks)
+                    imgui.end_tab_item()
 
-            imgui.separator()
+                # Parameters tab
+                if imgui.begin_tab_item("Parameters")[0]:
+                    self._draw_parameters_tab()
+                    imgui.end_tab_item()
 
-            # Connect button
-            if imgui.button("Connect", width=100):
-                if "connect" in callbacks:
-                    callbacks["connect"]()
+                # Settings tab
+                if imgui.begin_tab_item("Settings")[0]:
+                    self._draw_settings_tab()
+                    imgui.end_tab_item()
 
-            imgui.same_line()
-
-            # Disconnect button
-            if imgui.button("Disconnect", width=100):
-                if "disconnect" in callbacks:
-                    callbacks["disconnect"]()
-
-            imgui.separator()
-
-            # Params button
-            if imgui.button("Params", width=100):
-                self.show_params = not self.show_params
-
-            imgui.separator()
-
-            # Quit button
-            if imgui.button("Quit", width=100):
-                if "quit" in callbacks:
-                    callbacks["quit"]()
-                running = False
+                imgui.end_tab_bar()
 
         imgui.end()
 
@@ -71,6 +57,57 @@ class ImGuiUI:
             self.show_menu = False
 
         return running
+
+    def _draw_connection_tab(self, session_state: str, callbacks: Dict[str, Callable]) -> None:
+        """Draw connection tab"""
+        # State indicator
+        self._draw_state_indicator(session_state)
+        imgui.same_line()
+        imgui.text(f"State: {session_state}")
+
+        imgui.separator()
+
+        # Connect button
+        if imgui.button("Connect", width=100):
+            if "connect" in callbacks:
+                callbacks["connect"]()
+
+        imgui.same_line()
+
+        # Disconnect button
+        if imgui.button("Disconnect", width=100):
+            if "disconnect" in callbacks:
+                callbacks["disconnect"]()
+
+        imgui.separator()
+
+        # Quit button
+        if imgui.button("Quit", width=100):
+            if "quit" in callbacks:
+                callbacks["quit"]()
+
+    def _draw_parameters_tab(self) -> None:
+        """Draw parameters tab"""
+        from logic.param_manager import ParamManager
+
+        # Get param manager from app context (will be passed via callback)
+        # For now, show placeholder
+        imgui.text("Mouse Sensitivity")
+        imgui.slider_float("##sensitivity", 1.0, 0.1, 5.0)
+
+        imgui.text("FOV")
+        imgui.slider_float("##fov", 90.0, 30.0, 120.0)
+
+    def _draw_settings_tab(self) -> None:
+        """Draw settings tab"""
+        imgui.text("Video Quality")
+        imgui.combo("##quality", 0, ["Low", "Medium", "High", "Ultra"])
+
+        imgui.text("Recording")
+        imgui.checkbox("Enable Recording##rec", False)
+
+        imgui.text("Debug")
+        imgui.checkbox("Show Performance Graph##perf", False)
 
     def draw_status_bar(self, status: Dict) -> None:
         """Draw status bar
@@ -95,36 +132,6 @@ class ImGuiUI:
             imgui.text(f"Frames: {frames}")
 
         imgui.end()
-
-    def draw_params_panel(self, params: Dict, on_change: Optional[Callable] = None) -> None:
-        """Draw params panel
-
-        Args:
-            params: Params dict
-            on_change: Param change callback on_change(key, value)
-        """
-        if not self.show_params:
-            return
-
-        imgui.set_next_window_position(20, 280, imgui.ALWAYS)
-        imgui.set_next_window_size(300, 200, imgui.ALWAYS)
-
-        expanded, opened = imgui.begin("Parameters", True)
-        if expanded:
-            # Mouse sensitivity
-            sensitivity = params.get("mouse_sensitivity", 1.0)
-            changed, new_value = imgui.slider_float("Sensitivity", sensitivity, 0.1, 5.0)
-            if changed and on_change:
-                on_change("mouse_sensitivity", new_value)
-
-            # FOV
-            fov = params.get("fov", 90.0)
-            changed, new_value = imgui.slider_float("FOV", fov, 30.0, 120.0)
-            if changed and on_change:
-                on_change("fov", new_value)
-
-        imgui.end()
-        self.show_params = opened
 
     def _draw_state_indicator(self, state: str) -> None:
         """Draw colored state indicator

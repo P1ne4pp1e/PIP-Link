@@ -121,11 +121,6 @@ class Application:
                         "quit": lambda: setattr(self, "running", False),
                     }
                 )
-                # Only show params panel when menu is open
-                self.imgui_ui.draw_params_panel(
-                    self.param_manager.get_all_params(),
-                    on_change=self.param_manager.set_param
-                )
             else:
                 self.imgui_ui.draw_status_bar(status)
 
