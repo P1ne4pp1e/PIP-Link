@@ -34,17 +34,17 @@ class Application:
         glOrtho(-1, 1, -1, 1, -1, 1)
         glMatrixMode(GL_MODELVIEW)
 
-        # 初始化 ImGui
+        # Initialize ImGui
         imgui.create_context()
         self.imgui_renderer = PygameRenderer()
         io = imgui.get_io()
         io.display_size = (Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
 
-        # 加载中文字体
+        # Load font with larger size
         try:
-            io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\msyh.ttc", 16, io.fonts.get_glyph_ranges_chinese_simplified())
+            io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\msyh.ttc", 18, io.fonts.get_glyph_ranges_chinese_simplified())
         except:
-            pass  # 字体加载失败时使用默认字体
+            pass  # Use default font if loading fails
 
         # 组件
         self.session = SessionManager()
