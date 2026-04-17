@@ -42,13 +42,21 @@ class Application:
 
         # Load font with larger size
         try:
-            io.fonts.add_font_from_file_ttf(Config.FONT_PATH, Config.FONT_SIZE)
+            # Try bold variant first for better visibility
+            io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeuib.ttf", Config.FONT_SIZE)
+            print("[App] Loaded Segoe UI Bold font")
         except:
             try:
-                # Fallback to Chinese font if Segoe UI not available
-                io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\msyh.ttc", Config.FONT_SIZE, io.fonts.get_glyph_ranges_chinese_simplified())
+                # Fallback to regular Segoe UI
+                io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeui.ttf", Config.FONT_SIZE)
+                print("[App] Loaded Segoe UI font")
             except:
-                pass  # Use default font if loading fails
+                try:
+                    # Fallback to Chinese font
+                    io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\msyh.ttc", Config.FONT_SIZE, io.fonts.get_glyph_ranges_chinese_simplified())
+                    print("[App] Loaded Microsoft YaHei font")
+                except:
+                    print("[App] Using default font")
 
         # Components
         self.session = SessionManager()

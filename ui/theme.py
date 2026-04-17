@@ -55,12 +55,12 @@ class Theme:
         style.colors[imgui.COLOR_BORDER] = (0.15, 0.15, 0.25, 1.0)
         style.colors[imgui.COLOR_SEPARATOR] = (0.15, 0.15, 0.25, 1.0)
 
-        # Tab
+        # Tab - more visible active state
         style.colors[imgui.COLOR_TAB] = (0.06, 0.06, 0.1, 1.0)
         style.colors[imgui.COLOR_TAB_HOVERED] = (0.12, 0.12, 0.18, 1.0)
         style.colors[imgui.COLOR_TAB_ACTIVE] = Theme.ACCENT_PRIMARY
-        style.colors[imgui.COLOR_TAB_UNFOCUSED] = (0.06, 0.06, 0.1, 1.0)
-        style.colors[imgui.COLOR_TAB_UNFOCUSED_ACTIVE] = (0.1, 0.1, 0.15, 1.0)
+        style.colors[imgui.COLOR_TAB_UNFOCUSED] = (0.06, 0.06, 0.1, 0.6)
+        style.colors[imgui.COLOR_TAB_UNFOCUSED_ACTIVE] = (0.1, 0.1, 0.15, 0.8)
 
         # Slider
         style.colors[imgui.COLOR_SLIDER_GRAB] = Theme.ACCENT_PRIMARY
