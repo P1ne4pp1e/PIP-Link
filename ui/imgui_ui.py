@@ -2,6 +2,7 @@
 
 import imgui
 import time
+import math
 from typing import Optional, Callable, Dict
 from ui.theme import Theme
 from config import Config
@@ -59,6 +60,18 @@ class ImGuiUI:
         self._active_tab = 0
         self._tab_scroll_x = 0.0
         self._content_scroll_y = 0.0  # elastic scroll target for tab content
+
+        # Frame timing for dt-based animations
+        self._last_frame_time: float = time.time()
+        # Scroll spring time constant (seconds): smaller = snappier
+        self.scroll_tau: float = 0.08
+
+        # Animated combo state: key -> {"open": bool, "h": float, "scroll_target": float}
+        self._combo_anim: dict = {}
+        # Combo expand time constant (seconds)
+        self.combo_tau: float = 0.06
+        # Combo item hover alpha: key -> float (0.0 ~ 1.0)
+        self._combo_hover_alpha: dict = {}
 
         Theme.apply(imgui)
 
@@ -157,6 +170,146 @@ class ImGuiUI:
     # Animation
     # -------------------------------------------------------------------------
 
+    def _animated_combo(self, label: str, current: int, items: list, width: int = 220):
+        """Drop-down combo with expand/collapse height animation.
+        Returns (changed, new_index) same as imgui.combo."""
+        text_h = imgui.get_text_line_height()
+        item_pad_y = 4  # vertical padding inside each item
+        step_h = text_h + item_pad_y * 2  # total height per item row
+        pad_top = 8
+        max_visible = 6
+        needs_scroll = len(items) > max_visible
+        n = max_visible if needs_scroll else len(items)
+        full_h = step_h * n + 2 * pad_top
+
+        state = self._combo_anim.setdefault(
+            label, {"open": False, "h": 0.0, "scroll_target": 0.0})
+
+        # Animate height toward target (open) or 0 (closed)
+        h_target = full_h if state["open"] else 0.0
+        diff = h_target - state["h"]
+        if abs(diff) > 0.5:
+            t = 1.0 - math.exp(-self._dt / self.combo_tau)
+            state["h"] = state["h"] + diff * t
+        else:
+            state["h"] = h_target
+
+        anim_h = max(state["h"], 1.0)
+
+        # Zero out popup padding so the frame matches content exactly
+        imgui.push_style_var(imgui.STYLE_POPUP_ROUNDING, 4.0)
+        imgui.push_style_var(imgui.STYLE_WINDOW_PADDING, (0, 0))
+        imgui.set_next_window_size_constraints((width, anim_h), (width, anim_h))
+        imgui.set_next_item_width(width)
+        opened = imgui.begin_combo(label, items[current] if 0 <= current < len(items) else "")
+
+        if opened != state["open"]:
+            state["open"] = opened
+            if opened:
+                state["scroll_target"] = 0.0
+
+        changed = False
+        new_index = current
+
+        if opened:
+            animating = abs(state["h"] - full_h) > 0.5
+
+            # Short lists or animating: no scroll; long lists when done: elastic scroll
+            if not needs_scroll or animating:
+                child_flags = imgui.WINDOW_NO_SCROLLBAR | imgui.WINDOW_NO_SCROLL_WITH_MOUSE
+            else:
+                child_flags = imgui.WINDOW_NO_SCROLLBAR | imgui.WINDOW_NO_SCROLL_WITH_MOUSE
+
+            imgui.begin_child(f"##combo_clip_{label}", width, anim_h,
+                              border=False, flags=child_flags)
+
+            # Zero item spacing inside combo so items are flush
+            imgui.push_style_var(imgui.STYLE_ITEM_SPACING, (0, 0))
+
+            # Top padding
+            imgui.dummy(0, pad_top)
+
+            # Elastic scroll for long lists (we handle wheel ourselves)
+            if needs_scroll and not animating:
+                if imgui.is_window_hovered(imgui.HOVERED_CHILD_WINDOWS):
+                    io = imgui.get_io()
+                    if io.mouse_wheel != 0:
+                        state["scroll_target"] -= io.mouse_wheel * 100
+
+                max_scroll_y = imgui.get_scroll_max_y()
+                state["scroll_target"] = max(0.0, min(state["scroll_target"], max_scroll_y))
+
+                cur_y = imgui.get_scroll_y()
+                diff_y = state["scroll_target"] - cur_y
+                if abs(diff_y) > 0.5:
+                    st = 1.0 - math.exp(-self._dt / self.scroll_tau)
+                    imgui.set_scroll_y(cur_y + diff_y * st)
+                else:
+                    imgui.set_scroll_y(state["scroll_target"])
+
+            for i, item in enumerate(items):
+                is_selected = (i == current)
+                hover_key = f"{label}_{i}"
+
+                # Invisible button as click target
+                item_w = width
+                item_h_px = step_h
+                cursor_pos = imgui.get_cursor_screen_pos()
+
+                imgui.push_id(f"combo_item_{i}")
+                clicked = imgui.invisible_button(f"##ci{i}", item_w, item_h_px)
+                hovered = imgui.is_item_hovered()
+                imgui.pop_id()
+
+                # Animate hover alpha
+                cur_alpha = self._combo_hover_alpha.get(hover_key, 0.0)
+                target_alpha = 1.0 if hovered else 0.0
+                alpha_diff = target_alpha - cur_alpha
+                if abs(alpha_diff) > 0.01:
+                    ht = 1.0 - math.exp(-self._dt / 0.06)
+                    cur_alpha = cur_alpha + alpha_diff * ht
+                else:
+                    cur_alpha = target_alpha
+                self._combo_hover_alpha[hover_key] = cur_alpha
+
+                draw_list = imgui.get_window_draw_list()
+                pad_x = 0  # symmetric left/right inset for hover background
+                rounding = 4.0
+
+                # Draw hover/selected background with rounded corners
+                if cur_alpha > 0.01 or is_selected:
+                    bg_alpha = max(cur_alpha * 0.6, 0.4 if is_selected else 0.0)
+                    bg_color = imgui.get_color_u32_rgba(0.12, 0.12, 0.18, bg_alpha)
+                    draw_list.add_rect_filled(
+                        cursor_pos[0] + pad_x, cursor_pos[1],
+                        cursor_pos[0] + item_w - 2 * pad_x - 20, cursor_pos[1] + item_h_px,
+                        bg_color, rounding)
+
+                # Draw text with left padding
+                text_x = cursor_pos[0] + pad_x + 6
+                text_y = cursor_pos[1] + (item_h_px - imgui.get_text_line_height()) * 0.5
+                text_color = imgui.get_color_u32_rgba(*Theme.ACCENT_PRIMARY) if is_selected \
+                    else imgui.get_color_u32_rgba(*Theme.TEXT_PRIMARY)
+                draw_list.add_text(text_x, text_y, text_color, item)
+
+                if clicked:
+                    new_index = i
+                    changed = True
+                if is_selected:
+                    imgui.set_item_default_focus()
+
+            # Bottom padding so last item can scroll fully into view
+            if needs_scroll:
+                imgui.dummy(0, step_h)
+
+            imgui.pop_style_var()  # STYLE_ITEM_SPACING
+            imgui.end_child()
+            imgui.end_combo()
+
+        imgui.pop_style_var(2)  # STYLE_WINDOW_PADDING, STYLE_POPUP_ROUNDING
+
+        return changed, new_index
+
     def _update_menu_animation(self):
         current_time = time.time()
         elapsed = current_time - self.menu_open_time
@@ -202,6 +355,11 @@ class ImGuiUI:
                 self._last_bytes = bytes_now
                 self._last_bw_time = t_now
 
+        # Delta time for frame-rate-independent animations
+        now = time.time()
+        self._dt = min(now - self._last_frame_time, 0.1)  # cap at 100ms to avoid jumps
+        self._last_frame_time = now
+
         self._update_menu_animation()
         imgui.push_style_var(imgui.STYLE_ALPHA, self.menu_alpha)
 
@@ -241,7 +399,8 @@ class ImGuiUI:
             cur_y = imgui.get_scroll_y()
             diff_y = self._content_scroll_y - cur_y
             if abs(diff_y) > 0.5:
-                imgui.set_scroll_y(cur_y + diff_y * 0.25)
+                t = 1.0 - math.exp(-self._dt / self.scroll_tau)
+                imgui.set_scroll_y(cur_y + diff_y * t)
             else:
                 imgui.set_scroll_y(self._content_scroll_y)
 
@@ -259,6 +418,10 @@ class ImGuiUI:
                 self._draw_control_settings_tab(params, on_param_change)
             elif self._active_tab == 6:
                 self._draw_debug_tab(params, on_param_change, stats or {}, live_status or {})
+
+            # Compensate for outer window padding so content can scroll fully to bottom
+            pad_bottom = imgui.get_style().window_padding[1]
+            imgui.dummy(0, pad_bottom)
 
             imgui.end_child()
             imgui.pop_style_color()
@@ -294,11 +457,12 @@ class ImGuiUI:
         max_scroll = imgui.get_scroll_max_x()
         self._tab_scroll_x = max(0.0, min(self._tab_scroll_x, max_scroll))
 
-        # Smooth elastic interpolation toward target
+        # Smooth elastic interpolation toward target (dt-based, frame-rate independent)
         cur = imgui.get_scroll_x()
         diff = self._tab_scroll_x - cur
         if abs(diff) > 0.5:
-            imgui.set_scroll_x(cur + diff * 0.25)
+            t = 1.0 - math.exp(-self._dt / self.scroll_tau)
+            imgui.set_scroll_x(cur + diff * t)
         else:
             imgui.set_scroll_x(self._tab_scroll_x)
 
@@ -646,23 +810,17 @@ class ImGuiUI:
         pushed = self._push_font(self.font_body)
 
         quality = params.get("video_quality", 1)
-        imgui.set_next_item_width(220)
-        changed, new_val = imgui.combo("Quality", quality, ["LOW", "MEDIUM", "HIGH", "ULTRA"])
+        changed, new_val = self._animated_combo("Quality", quality, ["LOW", "MEDIUM", "HIGH", "ULTRA"])
         if changed and on_change:
             on_change("video_quality", new_val)
 
         resolution = params.get("resolution", 5)
-        imgui.set_next_item_width(220)
-        changed, new_val = imgui.combo(
-            "Resolution", resolution,
-            self._resolution_labels
-        )
+        changed, new_val = self._animated_combo("Resolution", resolution, self._resolution_labels)
         if changed and on_change:
             on_change("resolution", new_val)
 
         window_mode = params.get("window_mode", 0)
-        imgui.set_next_item_width(220)
-        changed, new_val = imgui.combo("Window Mode", window_mode, ["WINDOWED", "FULLSCREEN"])
+        changed, new_val = self._animated_combo("Window Mode", window_mode, ["WINDOWED", "FULLSCREEN"])
         if changed and on_change:
             on_change("window_mode", new_val)
 
@@ -709,8 +867,7 @@ class ImGuiUI:
         self._draw_subsection("FORMAT")
 
         fmt = params.get("recording_format", 0)
-        imgui.set_next_item_width(220)
-        changed, new_val = imgui.combo("Format##fmt", fmt, ["MP4 (H.264)", "MKV (H.264)", "AVI (RAW)"])
+        changed, new_val = self._animated_combo("Format##fmt", fmt, ["MP4 (H.264)", "MKV (H.264)", "AVI (RAW)"])
         if changed and on_change:
             on_change("recording_format", new_val)
 
@@ -835,9 +992,8 @@ class ImGuiUI:
         imgui.text_colored("PRESET", *Theme.TEXT_SECONDARY)
         self._pop_font(pushed)
         imgui.same_line(160)
-        imgui.set_next_item_width(220)
         preset_idx = 0
-        changed, new_preset = imgui.combo("##preset", preset_idx, ["Default (WASD)", "Arrow Keys", "Custom"])
+        changed, new_preset = self._animated_combo("##preset", preset_idx, ["Default (WASD)", "Arrow Keys", "Custom"])
 
         imgui.spacing()
         if imgui.button("Reset to Default", 150, 32):

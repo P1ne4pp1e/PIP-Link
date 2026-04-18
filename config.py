@@ -4,7 +4,7 @@ class Config:
     # UI config
     RENDER_WIDTH = 1600
     RENDER_HEIGHT = 900
-    TARGET_FPS = 30
+    TARGET_FPS = 120
     FULLSCREEN = False
 
     # Font config

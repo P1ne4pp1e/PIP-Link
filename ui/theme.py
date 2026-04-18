@@ -81,11 +81,11 @@ class Theme:
         # Popup
         style.colors[imgui.COLOR_POPUP_BACKGROUND] = Theme.BG_PANEL
 
-        # Scrollbar
-        style.colors[imgui.COLOR_SCROLLBAR_BACKGROUND] = (0.05, 0.05, 0.08, 0.5)
-        style.colors[imgui.COLOR_SCROLLBAR_GRAB] = (0.20, 0.20, 0.28, 0.8)
-        style.colors[imgui.COLOR_SCROLLBAR_GRAB_HOVERED] = (0.30, 0.30, 0.40, 1.0)
-        style.colors[imgui.COLOR_SCROLLBAR_GRAB_ACTIVE] = Theme.ACCENT_PRIMARY
+        # Scrollbar - hidden for smooth appearance (alpha 0 but size > 0)
+        style.colors[imgui.COLOR_SCROLLBAR_BACKGROUND] = (0.05, 0.05, 0.08, 0.0)
+        style.colors[imgui.COLOR_SCROLLBAR_GRAB] = (0.20, 0.20, 0.28, 0.0)
+        style.colors[imgui.COLOR_SCROLLBAR_GRAB_HOVERED] = (0.30, 0.30, 0.40, 0.0)
+        style.colors[imgui.COLOR_SCROLLBAR_GRAB_ACTIVE] = (0.0, 0.85, 1.0, 0.0)
 
         # Rounding - tighter, more industrial
         style.frame_rounding = 4.0
