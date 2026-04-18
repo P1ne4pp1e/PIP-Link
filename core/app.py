@@ -39,18 +39,17 @@ class Application:
         io = imgui.get_io()
         io.display_size = (Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
 
-        # Load fonts BEFORE renderer initialization
+        # Load three-tier font system BEFORE renderer initialization
+        font_title = None
+        font_body = None
+        font_mono = None
         try:
-            # Try bold variant first for better visibility
-            io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeuib.ttf", 18)
-            print("[App] Loaded Segoe UI Bold font")
-        except:
-            try:
-                # Fallback to regular Segoe UI
-                io.fonts.add_font_from_file_ttf("C:\\Windows\\Fonts\\segoeui.ttf", 18)
-                print("[App] Loaded Segoe UI font")
-            except:
-                print("[App] Using default font")
+            font_title = io.fonts.add_font_from_file_ttf(Config.FONT_PATH_BOLD, Config.FONT_SIZE_TITLE)
+            font_body = io.fonts.add_font_from_file_ttf(Config.FONT_PATH, Config.FONT_SIZE_BODY)
+            font_mono = io.fonts.add_font_from_file_ttf(Config.FONT_PATH_MONO, Config.FONT_SIZE_MONO)
+            print("[App] Loaded 3-tier fonts: title(Bold 22), body(16), mono(18)")
+        except Exception as e:
+            print(f"[App] Font loading error: {e}, using defaults")
 
         # Initialize renderer AFTER font loading
         self.imgui_renderer = PygameRenderer()
@@ -59,7 +58,7 @@ class Application:
         self.session = SessionManager()
         self.video_renderer = VideoRenderer(Config.RENDER_WIDTH, Config.RENDER_HEIGHT)
         self.video_renderer.init_texture()
-        self.imgui_ui = ImGuiUI()
+        self.imgui_ui = ImGuiUI(font_title=font_title, font_body=font_body, font_mono=font_mono)
         self.input_handler = InputHandler()
         self.input_mapper = InputMapper()
         self.param_manager = ParamManager()
@@ -86,8 +85,11 @@ class Application:
 
     def _on_toggle_menu(self):
         """Toggle menu"""
+        was_open = self.imgui_ui.show_menu
         self.imgui_ui.show_menu = not self.imgui_ui.show_menu
-        self.imgui_ui.menu_open_time = time.time()
+        # Only reset animation time when state actually changes
+        if was_open != self.imgui_ui.show_menu:
+            self.imgui_ui.menu_open_time = time.time()
         print(f"[App] Menu toggled: {self.imgui_ui.show_menu}")
 
     def run(self):
@@ -128,18 +130,21 @@ class Application:
 
             # 7. ImGui UI
             imgui.new_frame()
-            if self.imgui_ui.show_menu:
+            # Draw menu when open OR while fade-out animation is playing
+            if self.imgui_ui.show_menu or self.imgui_ui.menu_alpha > 0.01:
                 self.imgui_ui.draw_menu(
                     self.session.state.value,
                     callbacks={
-                        "connect": lambda: self.session.start_discovery(Config.MDNS_SERVICE_NAME),
+                        "connect": lambda svc=None: self.session.start_discovery(svc or Config.MDNS_SERVICE_NAME),
                         "disconnect": self.session.disconnect,
                         "quit": lambda: setattr(self, "running", False),
                     },
                     params=self.param_manager.get_all_params(),
-                    on_param_change=self.param_manager.set_param
+                    on_param_change=self.param_manager.set_param,
+                    stats=stats,
+                    live_status=status,
                 )
-            else:
+            if not self.imgui_ui.show_menu:
                 self.imgui_ui.draw_status_bar(status)
 
             imgui.render()

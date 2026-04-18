@@ -9,7 +9,12 @@ class Config:
 
     # Font config
     FONT_SIZE = 18
-    FONT_PATH = "C:\\Windows\\Fonts\\segoeui.ttf"  # Segoe UI looks better than msyh
+    FONT_SIZE_TITLE = 22
+    FONT_SIZE_BODY = 16
+    FONT_SIZE_MONO = 18
+    FONT_PATH = "C:\\Windows\\Fonts\\segoeui.ttf"
+    FONT_PATH_BOLD = "C:\\Windows\\Fonts\\segoeuib.ttf"
+    FONT_PATH_MONO = "C:\\Windows\\Fonts\\consola.ttf"
 
     # Network config
     MDNS_SERVICE_NAME = "_pip_link._udp"
