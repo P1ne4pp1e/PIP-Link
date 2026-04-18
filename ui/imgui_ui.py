@@ -55,6 +55,11 @@ class ImGuiUI:
             "1600x1280 (5:4)",
         ]
 
+        # Custom tab bar state
+        self._active_tab = 0
+        self._tab_scroll_x = 0.0
+        self._content_scroll_y = 0.0  # elastic scroll target for tab content
+
         Theme.apply(imgui)
 
     # -------------------------------------------------------------------------
@@ -214,29 +219,161 @@ class ImGuiUI:
         )
 
         if expanded:
-            pushed = self._push_font(self.font_title)
-            tab_opened = imgui.begin_tab_bar("MenuTabs", imgui.TAB_BAR_FITTING_POLICY_SCROLL)
-            self._pop_font(pushed)
+            # Custom tab bar with horizontal scroll
+            self._draw_custom_tab_bar()
 
-            if tab_opened:
-                self._tab("CONNECTION", lambda: self._draw_connection_tab(
-                    session_state, callbacks, stats or {}))
-                self._tab("PARAMETERS", lambda: self._draw_parameters_tab(
-                    params, on_param_change))
-                self._tab("VIDEO", lambda: self._draw_video_tab(
-                    params, on_param_change, stats or {}, live_status or {}))
-                self._tab("RECORDING", lambda: self._draw_recording_tab(
-                    params, on_param_change))
-                self._tab("DIAGNOSTICS", lambda: self._draw_diagnostics_tab(
-                    stats or {}, live_status or {}))
-                self._tab("CONTROL", lambda: self._draw_control_settings_tab(
-                    params, on_param_change))
-                self._tab("DEBUG", lambda: self._draw_debug_tab(
-                    params, on_param_change, stats or {}, live_status or {}))
-                imgui.end_tab_bar()
+            # Draw active tab content with elastic vertical scroll
+            imgui.spacing()
+            r, g, b, _ = Theme.BG_WINDOW
+            imgui.push_style_color(imgui.COLOR_CHILD_BACKGROUND, r, g, b, 0.0)
+            imgui.begin_child("##tab_content", 0, 0, border=False,
+                              flags=imgui.WINDOW_NO_SCROLL_WITH_MOUSE)
+
+            # Elastic vertical scroll (we handle wheel ourselves)
+            if imgui.is_window_hovered(imgui.HOVERED_CHILD_WINDOWS):
+                io = imgui.get_io()
+                if io.mouse_wheel != 0:
+                    self._content_scroll_y -= io.mouse_wheel * 100
+
+            max_scroll_y = imgui.get_scroll_max_y()
+            self._content_scroll_y = max(0.0, min(self._content_scroll_y, max_scroll_y))
+
+            cur_y = imgui.get_scroll_y()
+            diff_y = self._content_scroll_y - cur_y
+            if abs(diff_y) > 0.5:
+                imgui.set_scroll_y(cur_y + diff_y * 0.25)
+            else:
+                imgui.set_scroll_y(self._content_scroll_y)
+
+            if self._active_tab == 0:
+                self._draw_connection_tab(session_state, callbacks, stats or {})
+            elif self._active_tab == 1:
+                self._draw_parameters_tab(params, on_param_change)
+            elif self._active_tab == 2:
+                self._draw_video_tab(params, on_param_change, stats or {}, live_status or {})
+            elif self._active_tab == 3:
+                self._draw_recording_tab(params, on_param_change)
+            elif self._active_tab == 4:
+                self._draw_diagnostics_tab(stats or {}, live_status or {})
+            elif self._active_tab == 5:
+                self._draw_control_settings_tab(params, on_param_change)
+            elif self._active_tab == 6:
+                self._draw_debug_tab(params, on_param_change, stats or {}, live_status or {})
+
+            imgui.end_child()
+            imgui.pop_style_color()
 
         imgui.end()
         imgui.pop_style_var()
+
+    def _draw_custom_tab_bar(self):
+        """Custom tab bar: wheel scrolls horizontally, click to switch.
+        Style: plain text labels with accent underline on active tab."""
+        tab_labels = ["CONNECTION", "PARAMETERS", "VIDEO", "RECORDING",
+                      "DIAGNOSTICS", "CONTROL", "DEBUG"]
+
+        tab_bar_height = 34
+        pad_x = 16
+        gap = 6
+
+        imgui.push_style_color(imgui.COLOR_CHILD_BACKGROUND, 0.0, 0.0, 0.0, 0.0)
+        imgui.push_style_var(imgui.STYLE_ITEM_SPACING, (gap, 0))
+
+        imgui.begin_child(
+            "##tab_bar_scroll", 0, tab_bar_height, border=False,
+            flags=imgui.WINDOW_HORIZONTAL_SCROLLING_BAR | imgui.WINDOW_NO_SCROLLBAR
+        )
+
+        # Mouse wheel -> update target scroll position
+        if imgui.is_window_hovered():
+            io = imgui.get_io()
+            if io.mouse_wheel != 0:
+                self._tab_scroll_x -= io.mouse_wheel * 100
+
+        # Clamp target
+        max_scroll = imgui.get_scroll_max_x()
+        self._tab_scroll_x = max(0.0, min(self._tab_scroll_x, max_scroll))
+
+        # Smooth elastic interpolation toward target
+        cur = imgui.get_scroll_x()
+        diff = self._tab_scroll_x - cur
+        if abs(diff) > 0.5:
+            imgui.set_scroll_x(cur + diff * 0.25)
+        else:
+            imgui.set_scroll_x(self._tab_scroll_x)
+
+        draw_list = imgui.get_window_draw_list()
+        pushed_font = self._push_font(self.font_title)
+
+        # Get tab bar window info for auto-scroll
+        tab_bar_width = imgui.get_window_width()
+        content_x = 0.0  # Track cumulative x position in content
+
+        for i, label in enumerate(tab_labels):
+            if i > 0:
+                imgui.same_line()
+
+            is_active = (i == self._active_tab)
+
+            # Invisible button as click target
+            text_size = imgui.calc_text_size(label)
+            btn_w = text_size.x + pad_x * 2
+            btn_h = tab_bar_height
+
+            cursor_pos = imgui.get_cursor_screen_pos()
+
+            imgui.push_id(str(i))
+            clicked = imgui.invisible_button(f"##tab{i}", btn_w, btn_h)
+            hovered = imgui.is_item_hovered()
+            imgui.pop_id()
+
+            if clicked:
+                self._active_tab = i
+                self._content_scroll_y = 0.0
+
+                # Auto-scroll tab bar to show this tab fully
+                scroll_x = imgui.get_scroll_x()
+                tab_left = content_x
+                tab_right = content_x + btn_w
+
+                # If tab is left of visible area, scroll left
+                if tab_left < scroll_x:
+                    self._tab_scroll_x = tab_left - gap
+                # If tab is right of visible area, scroll right
+                elif tab_right > scroll_x + tab_bar_width:
+                    self._tab_scroll_x = tab_right - tab_bar_width + gap
+
+            # Track content position for next iteration
+            content_x += btn_w + gap
+
+            # Text color
+            if is_active:
+                text_color = imgui.get_color_u32_rgba(*Theme.ACCENT_PRIMARY)
+            elif hovered:
+                text_color = imgui.get_color_u32_rgba(0.8, 0.85, 0.95, 1.0)
+            else:
+                text_color = imgui.get_color_u32_rgba(*Theme.TEXT_SECONDARY)
+
+            # Draw label centered in button area
+            tx = cursor_pos[0] + (btn_w - text_size.x) * 0.5
+            ty = cursor_pos[1] + (btn_h - text_size.y) * 0.5
+            draw_list.add_text(tx, ty, text_color, label)
+
+            # Active tab: accent underline
+            if is_active:
+                line_y = cursor_pos[1] + btn_h - 2
+                line_color = imgui.get_color_u32_rgba(*Theme.ACCENT_PRIMARY)
+                draw_list.add_rect_filled(
+                    cursor_pos[0] + 4, line_y,
+                    cursor_pos[0] + btn_w - 4, line_y + 2,
+                    line_color
+                )
+
+        self._pop_font(pushed_font)
+
+        imgui.end_child()
+        imgui.pop_style_var()
+        imgui.pop_style_color()
 
     def _tab(self, label: str, draw_fn: Callable):
         pushed = self._push_font(self.font_title)
