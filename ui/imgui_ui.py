@@ -229,6 +229,8 @@ class ImGuiUI:
                     params, on_param_change))
                 self._tab("DIAGNOSTICS", lambda: self._draw_diagnostics_tab(
                     stats or {}, live_status or {}))
+                self._tab("CONTROL", lambda: self._draw_control_settings_tab(
+                    params, on_param_change))
                 self._tab("DEBUG", lambda: self._draw_debug_tab(
                     params, on_param_change, stats or {}, live_status or {}))
                 imgui.end_tab_bar()
@@ -666,6 +668,119 @@ class ImGuiUI:
         self._draw_kv_row("CRC Errors", f"{crc_errors}")
         self._draw_kv_row("Timeout Errors", f"{timeout_errors}")
         self._draw_kv_row("Decode Errors", f"{decode_errors}")
+
+    # -------------------------------------------------------------------------
+    # CONTROL SETTINGS tab
+    # -------------------------------------------------------------------------
+
+    def _draw_control_settings_tab(self, params: Dict, on_change: Optional[Callable]) -> None:
+        self._draw_section_title("CONTROL SETTINGS")
+
+        pushed = self._push_font(self.font_body)
+
+        # --- Keyboard mapping section ---
+        self._draw_subsection("KEYBOARD MAPPING")
+        self._pop_font(pushed)
+
+        # Display current key bindings (read-only for now)
+        self._draw_kv_row("Forward", "[W]")
+        self._draw_kv_row("Backward", "[S]")
+        self._draw_kv_row("Left", "[A]")
+        self._draw_kv_row("Right", "[D]")
+        self._draw_kv_row("Sprint", "[Shift]")
+        self._draw_kv_row("Special 1", "[E]")
+        self._draw_kv_row("Special 2", "[F]")
+
+        imgui.spacing()
+
+        # Preset selection
+        pushed = self._push_font(self.font_body)
+        imgui.text_colored("PRESET", *Theme.TEXT_SECONDARY)
+        self._pop_font(pushed)
+        imgui.same_line(160)
+        imgui.set_next_item_width(220)
+        preset_idx = 0
+        changed, new_preset = imgui.combo("##preset", preset_idx, ["Default (WASD)", "Arrow Keys", "Custom"])
+
+        imgui.spacing()
+        if imgui.button("Reset to Default", 150, 32):
+            pass  # Callback would go here
+        imgui.same_line()
+        if imgui.button("Save Preset", 150, 32):
+            pass  # Callback would go here
+
+        imgui.spacing()
+        imgui.separator()
+        imgui.spacing()
+
+        # --- Gamepad section ---
+        pushed = self._push_font(self.font_body)
+        self._draw_subsection("GAMEPAD CONFIGURATION")
+        self._pop_font(pushed)
+
+        # Gamepad status
+        gamepad_connected = False  # Would come from stats
+        status_text = "Connected: Xbox One Controller" if gamepad_connected else "No Gamepad Connected"
+        status_color = (0.0, 1.0, 0.5, 1.0) if gamepad_connected else (0.5, 0.5, 0.5, 1.0)
+
+        pushed = self._push_font(self.font_body)
+        imgui.text_colored("STATUS", *Theme.TEXT_SECONDARY)
+        self._pop_font(pushed)
+        imgui.same_line(160)
+        pushed = self._push_font(self.font_mono)
+        imgui.text_colored(status_text, *status_color)
+        self._pop_font(pushed)
+
+        imgui.spacing()
+
+        # Stick mapping
+        pushed = self._push_font(self.font_body)
+        imgui.text_colored("STICK MAPPING", *Theme.TEXT_SECONDARY)
+        self._pop_font(pushed)
+        imgui.separator()
+        imgui.spacing()
+
+        self._draw_kv_row("Left Stick", "Movement")
+        self._draw_kv_row("Right Stick", "Camera")
+
+        imgui.spacing()
+
+        # Button mapping
+        pushed = self._push_font(self.font_body)
+        imgui.text_colored("BUTTON MAPPING", *Theme.TEXT_SECONDARY)
+        self._pop_font(pushed)
+        imgui.separator()
+        imgui.spacing()
+
+        self._draw_kv_row("A Button", "Jump")
+        self._draw_kv_row("B Button", "Crouch")
+        self._draw_kv_row("X Button", "Action 1")
+        self._draw_kv_row("Y Button", "Action 2")
+        self._draw_kv_row("LT Trigger", "Brake")
+        self._draw_kv_row("RT Trigger", "Accelerate")
+
+        imgui.spacing()
+
+        # Deadzone slider
+        pushed = self._push_font(self.font_body)
+        imgui.text_colored("DEADZONE", *Theme.TEXT_SECONDARY)
+        self._pop_font(pushed)
+        imgui.separator()
+        imgui.spacing()
+
+        deadzone = params.get("gamepad_deadzone", 0.15)
+        imgui.set_next_item_width(300)
+        changed, new_deadzone = imgui.slider_float("Deadzone##gamepad", deadzone, 0.0, 0.5, "%.2f")
+        if changed and on_change:
+            on_change("gamepad_deadzone", new_deadzone)
+
+        imgui.spacing()
+
+        # Vibration toggle
+        vibration_enabled = params.get("gamepad_vibration", True)
+        changed, new_vibration = imgui.checkbox("Enable Vibration Feedback", vibration_enabled)
+        if changed and on_change:
+            on_change("gamepad_vibration", new_vibration)
 
     # -------------------------------------------------------------------------
     # DEBUG tab
