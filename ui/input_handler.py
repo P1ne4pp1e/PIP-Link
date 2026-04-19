@@ -14,6 +14,10 @@ class InputHandler:
         self.scroll_delta = 0
         self.mouse_locked = False
         self.on_toggle_menu: Optional[Callable] = None
+        self.on_toggle_console: Optional[Callable] = None
+        # Key capture callback for rebinding: called with (pygame_key, key_name)
+        self.on_key_capture: Optional[Callable] = None
+        self._capturing_keys: bool = False
 
     def handle_events(self, imgui_renderer=None) -> bool:
         """Handle events, return running status"""
@@ -29,11 +33,22 @@ class InputHandler:
                 imgui_renderer.process_event(event)
 
             if event.type == pygame.KEYDOWN:
+                # Key capture mode: intercept for rebinding
+                if self._capturing_keys and self.on_key_capture:
+                    key_name = pygame.key.name(event.key)
+                    self.on_key_capture(event.key, key_name)
+                    self._capturing_keys = False
+                    continue
+
                 self.keys_pressed.add(event.key)
                 # ESC toggles menu
                 if event.key == pygame.K_ESCAPE:
                     if self.on_toggle_menu:
                         self.on_toggle_menu()
+                # ` (backquote/tilde) toggles console
+                if event.key == pygame.K_BACKQUOTE:
+                    if self.on_toggle_console:
+                        self.on_toggle_console()
 
             elif event.type == pygame.KEYUP:
                 self.keys_pressed.discard(event.key)
@@ -85,3 +100,11 @@ class InputHandler:
     def is_key_pressed(self, key: int) -> bool:
         """Check if key is pressed"""
         return key in self.keys_pressed
+
+    def start_key_capture(self):
+        """Enter key capture mode for rebinding"""
+        self._capturing_keys = True
+
+    def is_capturing(self) -> bool:
+        """Check if currently in key capture mode"""
+        return self._capturing_keys

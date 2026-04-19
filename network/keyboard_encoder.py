@@ -128,14 +128,14 @@ class KeyboardEncoder:
             on_release=self._on_release
         )
         self.listener.start()
-        print("[KeyboardEncoder] 键盘监听已启动")
+        print("[KeyboardEncoder] Keyboard listener started")
 
     def stop(self):
         """停止键盘监听"""
         self.is_running = False
         if self.listener:
             self.listener.stop()
-        print("[KeyboardEncoder] 键盘监听已停止")
+        print("[KeyboardEncoder] Keyboard listener stopped")
 
     def _on_press(self, key):
         """按键按下事件"""
