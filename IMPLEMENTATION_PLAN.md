@@ -519,7 +519,7 @@ netstat -an | findstr UDP
 | 1 | Protocol | Completed | 100% ✓ |
 | 1 | LatencyCalculator | Completed | 100% ✓ |
 | 1 | UDP 基础 | Completed | 100% ✓ |
-| 2 | ServiceDiscovery | Not Started | 0% |
+| 2 | ServiceDiscovery | Completed | 100% ✓ |
 | 2 | ControlSender | Not Started | 0% |
 | 2 | VideoReceiver | Not Started | 0% |
 | 2 | HeartbeatManager | Not Started | 0% |
