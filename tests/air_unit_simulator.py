@@ -87,8 +87,8 @@ class AirUnitSimulator:
 
             # 创建服务信息
             self.service_info = ServiceInfo(
-                "_pip_link._udp.local.",
-                f"{self.air_unit_name}._pip_link._udp.local.",
+                "_pip-link._udp.local.",
+                f"{self.air_unit_name}._pip-link._udp.local.",
                 addresses=[socket.inet_aton(local_ip)],
                 port=self.control_port,
                 properties={
@@ -103,7 +103,7 @@ class AirUnitSimulator:
             self.zeroconf = Zeroconf()
             self.zeroconf.register_service(self.service_info)
 
-            logger.info(f"mDNS service registered: {self.air_unit_name}._pip_link._udp.local.")
+            logger.info(f"mDNS service registered: {self.air_unit_name}._pip-link._udp.local.")
             logger.info(f"  Control Port: {self.control_port}")
             logger.info(f"  Video Port: {self.video_port}")
 

@@ -19,7 +19,7 @@ class ServiceDiscovery:
     用于发现局域网内的机载端服务
     """
 
-    def __init__(self, service_type: str = "_pip_vision._udp.local."):
+    def __init__(self, service_type: str = "_pip-link._udp.local."):
         """
         初始化服务发现
 

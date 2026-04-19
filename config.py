@@ -17,7 +17,7 @@ class Config:
     FONT_PATH_MONO = "C:\\Windows\\Fonts\\consola.ttf"
 
     # Network config
-    MDNS_SERVICE_NAME = "_pip_link._udp"
+    MDNS_SERVICE_NAME = "_pip-link._udp"
     MDNS_TIMEOUT = 5.0
 
     # UDP config
