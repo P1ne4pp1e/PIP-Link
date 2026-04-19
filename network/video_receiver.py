@@ -21,8 +21,10 @@ class VideoReceiver:
         self.on_error: Optional[Callable] = None
 
         # 统计
+        self._stats_lock = threading.Lock()
         self.frames_received = 0
         self.bytes_received = 0
+        self.frames_dropped = 0
 
     def start(self):
         """启动接收"""
@@ -32,7 +34,7 @@ class VideoReceiver:
         self.is_running = True
         thread = threading.Thread(target=self._rx_thread, daemon=True)
         thread.start()
-        print(f"[VideoReceiver] 启动 (端口: {self.port})")
+        print(f"[VideoReceiver] Started (port: {self.port})")
 
     def stop(self):
         """停止接收"""
@@ -40,9 +42,9 @@ class VideoReceiver:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
-        print("[VideoReceiver] 已停止")
+        print("[VideoReceiver] Stopped")
 
     def _rx_thread(self):
         """接收线程"""
@@ -52,19 +54,21 @@ class VideoReceiver:
             self.socket.bind(("0.0.0.0", self.port))
             self.socket.settimeout(1.0)
 
-            print(f"[VideoReceiver] UDP 绑定: 0.0.0.0:{self.port}")
+            print(f"[VideoReceiver] UDP bind: 0.0.0.0:{self.port}")
 
             while self.is_running:
                 try:
                     data, addr = self.socket.recvfrom(Config.UDP_BUFFER_SIZE)
-                    self.bytes_received += len(data)
-                    self.frames_received += 1
+                    with self._stats_lock:
+                        self.bytes_received += len(data)
+                        self.frames_received += 1
 
                     # 放入渲染队列
                     try:
                         self.render_queue.put_nowait(data)
                     except queue.Full:
-                        pass  # 丢弃最旧的帧
+                        with self._stats_lock:
+                            self.frames_dropped += 1
 
                     if self.on_frame_received:
                         self.on_frame_received(data, addr)
@@ -73,12 +77,12 @@ class VideoReceiver:
                     continue
                 except Exception as e:
                     if self.is_running:
-                        print(f"[VideoReceiver] 接收错误: {e}")
+                        print(f"[VideoReceiver] Receive error: {e}")
                         if self.on_error:
                             self.on_error(str(e))
 
         except Exception as e:
-            print(f"[VideoReceiver] 线程错误: {e}")
+            print(f"[VideoReceiver] Thread error: {e}")
             if self.on_error:
                 self.on_error(str(e))
 
@@ -91,7 +95,9 @@ class VideoReceiver:
 
     def get_statistics(self) -> dict:
         """获取统计"""
-        return {
-            "frames_received": self.frames_received,
-            "bytes_received": self.bytes_received,
-        }
+        with self._stats_lock:
+            return {
+                "frames_received": self.frames_received,
+                "bytes_received": self.bytes_received,
+                "frames_dropped": self.frames_dropped,
+            }

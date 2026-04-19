@@ -26,7 +26,7 @@ class ServiceDiscovery:
         self.is_running = True
         thread = threading.Thread(target=self._discovery_thread, args=(service_name,), daemon=True)
         thread.start()
-        print(f"[ServiceDiscovery] 启动 mDNS 发现: {service_name}")
+        print(f"[ServiceDiscovery] Starting mDNS discovery: {service_name}")
 
     def stop(self):
         """停止发现"""
@@ -35,7 +35,7 @@ class ServiceDiscovery:
             self.browser.cancel()
         if self.zeroconf:
             self.zeroconf.close()
-        print("[ServiceDiscovery] 已停止")
+        print("[ServiceDiscovery] Stopped")
 
     def _discovery_thread(self, service_name: str):
         """发现线程"""
@@ -51,9 +51,20 @@ class ServiceDiscovery:
                 threading.Event().wait(0.1)
 
         except Exception as e:
-            print(f"[ServiceDiscovery] 错误: {e}")
+            print(f"[ServiceDiscovery] Error: {e}")
             if self.on_error:
                 self.on_error(str(e))
+        finally:
+            if self.browser:
+                try:
+                    self.browser.cancel()
+                except Exception:
+                    pass
+            if self.zeroconf:
+                try:
+                    self.zeroconf.close()
+                except Exception:
+                    pass
 
     def _on_service_state_change(self, zeroconf, service_type, name, state_change):
         """服务状态变化"""
@@ -70,4 +81,4 @@ class ServiceDiscovery:
                 if self.on_service_found:
                     self.on_service_found(ip, port)
         except Exception as e:
-            print(f"[ServiceDiscovery] 解析错误: {e}")
+            print(f"[ServiceDiscovery] Resolve error: {e}")

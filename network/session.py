@@ -56,14 +56,15 @@ class SessionManager:
 
     def _on_service_found(self, ip: str, port: int):
         """服务发现回调"""
-        print(f"[SessionManager] 发现服务: {ip}:{port}")
-        self.server_ip = ip
-        self.server_port = port
+        print(f"[SessionManager] Service found: {ip}:{port}")
+        with self._lock:
+            self.server_ip = ip
+            self.server_port = port
         self._connect_to_server()
 
     def _on_discovery_error(self, error: str):
         """发现错误回调"""
-        print(f"[SessionManager] 发现错误: {error}")
+        print(f"[SessionManager] Discovery error: {error}")
         self._set_state(SessionState.IDLE)
         if self.on_error:
             self.on_error(error)
@@ -92,10 +93,10 @@ class SessionManager:
                 self.heartbeat.start(self.server_ip, self.server_port)
 
                 self._set_state(SessionState.CONNECTED)
-                print(f"[SessionManager] 已连接到 {self.server_ip}:{self.server_port}")
+                print(f"[SessionManager] Connected to {self.server_ip}:{self.server_port}")
 
             except Exception as e:
-                print(f"[SessionManager] 连接错误: {e}")
+                print(f"[SessionManager] Connection error: {e}")
                 self._set_state(SessionState.IDLE)
                 if self.on_error:
                     self.on_error(str(e))
@@ -122,13 +123,13 @@ class SessionManager:
                 self.heartbeat = None
 
             self._set_state(SessionState.IDLE)
-            print("[SessionManager] 已断开连接")
+            print("[SessionManager] Disconnected")
 
     def _set_state(self, new_state: SessionState):
         """设置状态"""
         if self.state != new_state:
             self.state = new_state
-            print(f"[SessionManager] 状态: {new_state.value}")
+            print(f"[SessionManager] State: {new_state.value}")
             if self.on_state_changed:
                 self.on_state_changed(new_state)
 

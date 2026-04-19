@@ -23,6 +23,7 @@ class ControlSender:
         self.on_error: Optional[Callable] = None
 
         # 统计
+        self._stats_lock = threading.Lock()
         self.commands_sent = 0
 
     def start(self, server_ip: str, server_port: int):
@@ -38,7 +39,7 @@ class ControlSender:
 
         thread = threading.Thread(target=self._tx_thread, daemon=True)
         thread.start()
-        print(f"[ControlSender] 启动 ({server_ip}:{server_port})")
+        print(f"[ControlSender] Started ({server_ip}:{server_port})")
 
     def stop(self):
         """停止发送"""
@@ -47,9 +48,9 @@ class ControlSender:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
-        print("[ControlSender] 已停止")
+        print("[ControlSender] Stopped")
 
     def _tx_thread(self):
         """发送线程"""
@@ -70,7 +71,7 @@ class ControlSender:
                 time.sleep(0.001)
 
         except Exception as e:
-            print(f"[ControlSender] 线程错误: {e}")
+            print(f"[ControlSender] Thread error: {e}")
             if self.on_error:
                 self.on_error(str(e))
 
@@ -85,16 +86,18 @@ class ControlSender:
 
             # 简单格式: 10字节键盘状态
             self.socket.sendto(keyboard_state, self.remote_addr)
-            self.commands_sent += 1
+            with self._stats_lock:
+                self.commands_sent += 1
 
         except Exception as e:
             if self.is_running:
-                print(f"[ControlSender] 发送错误: {e}")
+                print(f"[ControlSender] Send error: {e}")
                 if self.on_error:
                     self.on_error(str(e))
 
     def get_statistics(self) -> dict:
         """获取统计"""
-        return {
-            "commands_sent": self.commands_sent,
-        }
+        with self._stats_lock:
+            return {
+                "commands_sent": self.commands_sent,
+            }

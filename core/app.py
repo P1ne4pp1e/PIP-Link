@@ -8,11 +8,14 @@ import imgui
 from imgui.integrations.pygame import PygameRenderer
 import time
 
+import builtins
+
 from config import Config
 from network.session import SessionManager
 from ui.renderer import VideoRenderer
 from ui.imgui_ui import ImGuiUI
 from ui.input_handler import InputHandler
+from ui.console import GameConsole
 from logic.input_mapper import InputMapper
 from logic.param_manager import ParamManager
 from logic.status_monitor import StatusMonitor
@@ -64,6 +67,17 @@ class Application:
         self.param_manager = ParamManager()
         self.status_monitor = StatusMonitor()
 
+        # Developer console (overlay)
+        self.console = GameConsole(font_mono=font_mono, font_body=font_body)
+
+        # Install print interceptor — tee to both terminal and console
+        self._original_print = builtins.print
+        builtins.print = self._intercepted_print
+
+        # Replay early boot messages (printed before interceptor was installed)
+        if font_mono:
+            self.console.log("[App] Loaded 3-tier fonts: title(Bold 22), body(16), mono(18)", "system")
+
         # State
         self.running = True
         self.fps_clock = pygame.time.Clock()
@@ -71,25 +85,31 @@ class Application:
         # Always show cursor
         pygame.mouse.set_visible(True)
 
-        # Initialize menu animation time
-        import time
-        self.imgui_ui.menu_open_time = time.time()
+        # Menu starts closed, animation state already initialized in ImGuiUI.__init__
 
         # Set callbacks
         self.session.on_state_changed = self._on_session_state_changed
         self.input_handler.on_toggle_menu = self._on_toggle_menu
+        self.input_handler.on_toggle_console = self._on_toggle_console
+        self.input_handler.on_key_capture = self.imgui_ui.on_key_captured
 
     def _on_session_state_changed(self, state):
         """Session state changed callback"""
         print(f"[App] Session state: {state.value}")
 
+    def _intercepted_print(self, *args, **kwargs):
+        """拦截 print，同时输出到终端和控制台"""
+        text = " ".join(str(a) for a in args)
+        self._original_print(*args, **kwargs)
+        self.console.log(text)
+
+    def _on_toggle_console(self):
+        """Toggle developer console"""
+        self.console.toggle()
+
     def _on_toggle_menu(self):
         """Toggle menu"""
-        was_open = self.imgui_ui.show_menu
         self.imgui_ui.show_menu = not self.imgui_ui.show_menu
-        # Only reset animation time when state actually changes
-        if was_open != self.imgui_ui.show_menu:
-            self.imgui_ui.menu_open_time = time.time()
         print(f"[App] Menu toggled: {self.imgui_ui.show_menu}")
 
     def run(self):
@@ -122,6 +142,12 @@ class Application:
             self.status_monitor.update(stats)
             status = self.status_monitor.get_status()
 
+            # Feed performance history for DEBUG tab graphs
+            self.imgui_ui.update_perf_history(
+                status.get("fps", 0.0),
+                status.get("latency_ms", 0.0),
+            )
+
             # 5. Clear framebuffer once at start
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
@@ -130,6 +156,11 @@ class Application:
 
             # 7. ImGui UI
             imgui.new_frame()
+
+            # No signal overlay when no video frame
+            if self.video_renderer.frame_data is None:
+                self.imgui_ui.draw_no_signal()
+
             # Draw menu when open OR while fade-out animation is playing
             if self.imgui_ui.show_menu or self.imgui_ui.menu_alpha > 0.01:
                 self.imgui_ui.draw_menu(
@@ -138,6 +169,7 @@ class Application:
                         "connect": lambda svc=None: self.session.start_discovery(svc or Config.MDNS_SERVICE_NAME),
                         "disconnect": self.session.disconnect,
                         "quit": lambda: setattr(self, "running", False),
+                        "start_key_capture": self.input_handler.start_key_capture,
                     },
                     params=self.param_manager.get_all_params(),
                     on_param_change=self.param_manager.set_param,
@@ -146,6 +178,9 @@ class Application:
                 )
             if not self.imgui_ui.show_menu:
                 self.imgui_ui.draw_status_bar(status)
+
+            # Developer console overlay (renders on top of everything)
+            self.console.draw()
 
             imgui.render()
             self.imgui_renderer.render(imgui.get_draw_data())

@@ -19,6 +19,7 @@ class HeartbeatManager:
         self.on_error: Optional[Callable] = None
 
         # 统计
+        self._stats_lock = threading.Lock()
         self.heartbeats_sent = 0
 
     def start(self, server_ip: str, server_port: int):
@@ -31,7 +32,7 @@ class HeartbeatManager:
 
         thread = threading.Thread(target=self._heartbeat_thread, daemon=True)
         thread.start()
-        print(f"[HeartbeatManager] 启动 ({server_ip}:{server_port})")
+        print(f"[HeartbeatManager] Started ({server_ip}:{server_port})")
 
     def stop(self):
         """停止心跳"""
@@ -39,9 +40,9 @@ class HeartbeatManager:
         if self.socket:
             try:
                 self.socket.close()
-            except:
+            except Exception:
                 pass
-        print("[HeartbeatManager] 已停止")
+        print("[HeartbeatManager] Stopped")
 
     def _heartbeat_thread(self):
         """心跳线程"""
@@ -54,12 +55,12 @@ class HeartbeatManager:
                     time.sleep(Config.HEARTBEAT_INTERVAL)
                 except Exception as e:
                     if self.is_running:
-                        print(f"[HeartbeatManager] 发送错误: {e}")
+                        print(f"[HeartbeatManager] Send error: {e}")
                         if self.on_error:
                             self.on_error(str(e))
 
         except Exception as e:
-            print(f"[HeartbeatManager] 线程错误: {e}")
+            print(f"[HeartbeatManager] Thread error: {e}")
             if self.on_error:
                 self.on_error(str(e))
 
@@ -70,10 +71,12 @@ class HeartbeatManager:
 
         packet = b"HEARTBEAT"
         self.socket.sendto(packet, self.remote_addr)
-        self.heartbeats_sent += 1
+        with self._stats_lock:
+            self.heartbeats_sent += 1
 
     def get_statistics(self) -> dict:
         """获取统计"""
-        return {
-            "heartbeats_sent": self.heartbeats_sent,
-        }
+        with self._stats_lock:
+            return {
+                "heartbeats_sent": self.heartbeats_sent,
+            }
