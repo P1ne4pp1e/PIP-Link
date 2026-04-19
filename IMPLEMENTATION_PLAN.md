@@ -523,10 +523,10 @@ netstat -an | findstr UDP
 | 2 | ControlSender | Completed | 100% ✓ |
 | 2 | VideoReceiver | Completed | 100% ✓ |
 | 2 | HeartbeatManager | Completed | 100% ✓ |
-| 3 | SessionManager | In Progress | 30% |
-| 3 | InputMapper | Not Started | 0% |
-| 3 | StatusMonitor | Not Started | 0% |
-| 4 | 主循环框架 | Not Started | 0% |
+| 3 | SessionManager | Completed | 100% ✓ |
+| 3 | InputMapper | Completed | 100% ✓ |
+| 3 | StatusMonitor | Completed | 100% ✓ |
+| 4 | 主循环框架 | In Progress | 20% |
 | 4 | 视频渲染 | Not Started | 0% |
 | 4 | ImGui UI | Not Started | 0% |
 | 5 | FEC 解码 | Not Started | 0% |
