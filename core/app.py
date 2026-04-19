@@ -186,6 +186,7 @@ class Application:
                     callbacks={
                         "connect": lambda svc=None: self.session.start_discovery(svc or Config.MDNS_SERVICE_NAME),
                         "disconnect": self.session.disconnect,
+                        "scan_devices": lambda: self.session.start_discovery(Config.MDNS_SERVICE_NAME),
                         "quit": lambda: setattr(self, "running", False),
                         "start_key_capture": self.input_handler.start_key_capture,
                     },
