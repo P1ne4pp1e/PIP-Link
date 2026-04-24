@@ -62,7 +62,50 @@ class ACKMessage:
 
 
 class Protocol:
-    """协议编解码器"""
+    """协议编解码器
+
+    消息格式（通用）：
+    [Magic:2][Version:1][MsgType:1][Reserved:1][Seq:4][...payload...][CRC32:4]
+    """
+
+    # -------------------------------------------------------------------------
+    # 私有 helper
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _build_header(msg_type: int, seq: int) -> bytes:
+        return struct.pack('=HBBBI', MAGIC, VERSION, msg_type, 0, seq)
+
+    @staticmethod
+    def _seal(data: bytes) -> bytes:
+        """追加 CRC32 校验尾"""
+        return data + struct.pack('=I', zlib.crc32(data) & 0xffffffff)
+
+    @staticmethod
+    def _verify_crc(data: bytes) -> None:
+        crc_recv = struct.unpack('=I', data[-4:])[0]
+        crc_calc = zlib.crc32(data[:-4]) & 0xffffffff
+        if crc_recv != crc_calc:
+            raise ValueError(f"CRC 校验失败: {hex(crc_recv)} != {hex(crc_calc)}")
+
+    @staticmethod
+    def _parse_header(data: bytes, min_len: int, expected_type: int = 0) -> Tuple[int, int]:
+        """解析并验证消息头，返回 (msg_type, seq)"""
+        if len(data) < min_len:
+            raise ValueError(f"消息太短: {len(data)} bytes")
+        magic, version, msg_type, _, seq = struct.unpack('=HBBBI', data[:9])
+        if magic != MAGIC:
+            raise ValueError(f"Magic 错误: {hex(magic)}")
+        if version != VERSION:
+            raise ValueError(f"Version 错误: {version}")
+        if expected_type and msg_type != expected_type:
+            raise ValueError(f"消息类型错误: {msg_type}")
+        Protocol._verify_crc(data)
+        return msg_type, seq
+
+    # -------------------------------------------------------------------------
+    # 构建方法
+    # -------------------------------------------------------------------------
 
     @staticmethod
     def build_control_command(
@@ -74,289 +117,105 @@ class Protocol:
         mouse_buttons: int = 0,
         scroll_delta: int = 0,
     ) -> bytes:
+        """构建控制指令消息（37 字节）
+        格式：[Header:9][t1:8][KeyboardState:10][MouseDX:2][MouseDY:2][MouseButtons:1][ScrollDelta:1][CRC32:4]
         """
-        构建控制指令消息
-
-        格式：
-        [Magic:2][Version:1][MsgType:1][Reserved:1][Seq:4][t1:8][KeyboardState:10]
-        [MouseDX:2][MouseDY:2][MouseButtons:1][ScrollDelta:1][CRC32:4]
-        总长度：37 字节
-        """
-        kb_payload = bytes(keyboard_state[:KEYBOARD_STATE_SIZE]).ljust(KEYBOARD_STATE_SIZE, b'\x00')
-        mouse_payload = struct.pack('=hhBb',
-                                    max(-32768, min(32767, mouse_dx)),
-                                    max(-32768, min(32767, mouse_dy)),
-                                    mouse_buttons & 0xFF,
-                                    max(-128, min(127, scroll_delta)))
-
-        # 构建消息头（不含 CRC）
-        header = struct.pack(
-            '=HBBBI',
-            MAGIC,
-            VERSION,
-            MSG_TYPE_CONTROL_COMMAND,
-            0,
-            seq
+        kb = bytes(keyboard_state[:KEYBOARD_STATE_SIZE]).ljust(KEYBOARD_STATE_SIZE, b'\x00')
+        mouse = struct.pack('=hhBb',
+                            max(-32768, min(32767, mouse_dx)),
+                            max(-32768, min(32767, mouse_dy)),
+                            mouse_buttons & 0xFF,
+                            max(-128, min(127, scroll_delta)))
+        return Protocol._seal(
+            Protocol._build_header(MSG_TYPE_CONTROL_COMMAND, seq) + struct.pack('=d', t1) + kb + mouse
         )
-
-        # 构建时间戳部分
-        timestamp = struct.pack('=d', t1)
-
-        # 组合消息（不含 CRC）
-        message_without_crc = header + timestamp + kb_payload + mouse_payload
-
-        # 计算 CRC32
-        crc = zlib.crc32(message_without_crc) & 0xffffffff
-
-        # 添加 CRC
-        message = message_without_crc + struct.pack('=I', crc)
-
-        return message
 
     @staticmethod
     def build_ack(seq: int, t2: float, t3: float) -> bytes:
+        """构建 ACK 消息
+        格式：[Header:9][t2:8][t3:8][CRC32:4]
         """
-        构建 ACK 消息
-
-        格式：
-        [Magic:2][Version:1][MsgType:1][Reserved:1][Seq:4][t2:8][t3:8][CRC32:4]
-        """
-        # 构建消息头（不含 CRC）
-        header = struct.pack(
-            '=HBBBI',
-            MAGIC,
-            VERSION,
-            MSG_TYPE_ACK,
-            0,
-            seq
+        return Protocol._seal(
+            Protocol._build_header(MSG_TYPE_ACK, seq) + struct.pack('=dd', t2, t3)
         )
-
-        # 构建时间戳部分
-        timestamps = struct.pack('=dd', t2, t3)
-
-        # 组合消息（不含 CRC）
-        message_without_crc = header + timestamps
-
-        # 计算 CRC32
-        crc = zlib.crc32(message_without_crc) & 0xffffffff
-
-        # 添加 CRC
-        message = message_without_crc + struct.pack('=I', crc)
-
-        return message
 
     @staticmethod
     def build_heartbeat(seq: int, t1: float) -> bytes:
+        """构建心跳消息
+        格式：[Header:9][t1:8][CRC32:4]
         """
-        构建心跳消息
-
-        格式：
-        [Magic:2][Version:1][MsgType:1][Reserved:1][Seq:4][t1:8][CRC32:4]
-        """
-        # 构建消息头（不含 CRC）
-        header = struct.pack(
-            '=HBBBI',
-            MAGIC,
-            VERSION,
-            MSG_TYPE_HEARTBEAT,
-            0,
-            seq
+        return Protocol._seal(
+            Protocol._build_header(MSG_TYPE_HEARTBEAT, seq) + struct.pack('=d', t1)
         )
-
-        # 构建时间戳部分
-        timestamp = struct.pack('=d', t1)
-
-        # 组合消息（不含 CRC）
-        message_without_crc = header + timestamp
-
-        # 计算 CRC32
-        crc = zlib.crc32(message_without_crc) & 0xffffffff
-
-        # 添加 CRC
-        message = message_without_crc + struct.pack('=I', crc)
-
-        return message
-
-    @staticmethod
-    def parse_message(data: bytes) -> Tuple[int, int, float, Optional[bytes]]:
-        """
-        解析消息
-
-        返回：(msg_type, seq, t1, payload)
-        """
-        if len(data) < 18:
-            raise ValueError(f"消息太短: {len(data)} bytes")
-
-        # 解析消息头
-        magic, version, msg_type, reserved, seq = struct.unpack(
-            '=HBBBI',
-            data[:9]
-        )
-
-        # 验证 Magic 和 Version
-        if magic != MAGIC:
-            raise ValueError(f"Magic 错误: {hex(magic)}")
-        if version != VERSION:
-            raise ValueError(f"Version 错误: {version}")
-
-        # 验证 CRC
-        crc_received = struct.unpack('=I', data[-4:])[0]
-        crc_calculated = zlib.crc32(data[:-4]) & 0xffffffff
-        if crc_received != crc_calculated:
-            raise ValueError(f"CRC 校验失败: {hex(crc_received)} != {hex(crc_calculated)}")
-
-        # 解析时间戳
-        t1 = struct.unpack('=d', data[9:17])[0]
-
-        # 解析 payload
-        payload = data[17:-4] if len(data) > 21 else None
-
-        return msg_type, seq, t1, payload
-
-    @staticmethod
-    def parse_ack(data: bytes) -> Tuple[int, float, float]:
-        """
-        解析 ACK 消息
-
-        返回：(seq, t2, t3)
-        """
-        if len(data) < 25:
-            raise ValueError(f"ACK 消息太短: {len(data)} bytes")
-
-        # 解析消息头
-        magic, version, msg_type, reserved, seq = struct.unpack(
-            '=HBBBI',
-            data[:9]
-        )
-
-        # 验证 Magic 和 Version
-        if magic != MAGIC:
-            raise ValueError(f"Magic 错误: {hex(magic)}")
-        if version != VERSION:
-            raise ValueError(f"Version 错误: {version}")
-        if msg_type != MSG_TYPE_ACK:
-            raise ValueError(f"消息类型错误: {msg_type}")
-
-        # 验证 CRC
-        crc_received = struct.unpack('=I', data[-4:])[0]
-        crc_calculated = zlib.crc32(data[:-4]) & 0xffffffff
-        if crc_received != crc_calculated:
-            raise ValueError(f"CRC 校验失败: {hex(crc_received)} != {hex(crc_calculated)}")
-
-        # 解析时间戳
-        t2, t3 = struct.unpack('=dd', data[9:25])
-
-        return seq, t2, t3
-
-    @staticmethod
-    def parse_heartbeat(data: bytes) -> Tuple[int, float]:
-        """
-        解析心跳消息
-
-        返回：(seq, t1)
-        """
-        if len(data) < 21:
-            raise ValueError(f"心跳消息太短: {len(data)} bytes")
-
-        # 解析消息头
-        magic, version, msg_type, reserved, seq = struct.unpack(
-            '=HBBBI',
-            data[:9]
-        )
-
-        # 验证 Magic 和 Version
-        if magic != MAGIC:
-            raise ValueError(f"Magic 错误: {hex(magic)}")
-        if version != VERSION:
-            raise ValueError(f"Version 错误: {version}")
-        if msg_type != MSG_TYPE_HEARTBEAT:
-            raise ValueError(f"消息类型错误: {msg_type}")
-
-        # 验证 CRC
-        crc_received = struct.unpack('=I', data[-4:])[0]
-        crc_calculated = zlib.crc32(data[:-4]) & 0xffffffff
-        if crc_received != crc_calculated:
-            raise ValueError(f"CRC 校验失败: {hex(crc_received)} != {hex(crc_calculated)}")
-
-        # 解析时间戳
-        t1 = struct.unpack('=d', data[9:17])[0]
-
-        return seq, t1
 
     @staticmethod
     def build_video_ack(frame_id: int) -> bytes:
+        """构建视频帧 ACK
+        格式：[Header:9][CRC32:4]
         """
-        构建视频帧 ACK
-
-        格式：[Magic:2][Version:1][MsgType:1][Reserved:1][FrameID:4][CRC32:4]
-        """
-        msg = struct.pack('=HBBBI', MAGIC, VERSION, MSG_TYPE_VIDEO_ACK, 0, frame_id)
-        crc = zlib.crc32(msg) & 0xffffffff
-        return msg + struct.pack('=I', crc)
-
-    @staticmethod
-    def parse_video_ack(data: bytes) -> int:
-        """解析视频帧 ACK，返回 frame_id"""
-        if len(data) < 13:
-            raise ValueError(f"Video ACK 太短: {len(data)} bytes")
-        magic, version, msg_type, reserved, frame_id = struct.unpack('=HBBBI', data[:9])
-        if magic != MAGIC or msg_type != MSG_TYPE_VIDEO_ACK:
-            raise ValueError("不是 Video ACK")
-        crc_received = struct.unpack('=I', data[-4:])[0]
-        crc_calculated = zlib.crc32(data[:-4]) & 0xffffffff
-        if crc_received != crc_calculated:
-            raise ValueError("CRC 校验失败")
-        return frame_id
+        return Protocol._seal(Protocol._build_header(MSG_TYPE_VIDEO_ACK, frame_id))
 
     @staticmethod
     def build_video_nack(frame_id: int, missing_chunks: list) -> bytes:
+        """构建视频帧 NACK
+        格式：[Header:9][NumChunks:2][ChunkIdx:2*N][CRC32:4]
         """
-        构建视频帧 NACK
-
-        格式：[Magic:2][Version:1][MsgType:1][Reserved:1][FrameID:4][NumChunks:2][ChunkIdx:2*N][CRC32:4]
-        """
-        header = struct.pack('=HBBBI', MAGIC, VERSION, MSG_TYPE_VIDEO_NACK, 0, frame_id)
-        chunks_data = struct.pack('=H', len(missing_chunks))
+        chunks = struct.pack('=H', len(missing_chunks))
         for idx in missing_chunks:
-            chunks_data += struct.pack('=H', idx)
-        msg = header + chunks_data
-        crc = zlib.crc32(msg) & 0xffffffff
-        return msg + struct.pack('=I', crc)
-
-    @staticmethod
-    def parse_video_nack(data: bytes) -> tuple:
-        """解析视频帧 NACK，返回 (frame_id, [missing_chunk_indices])"""
-        if len(data) < 15:
-            raise ValueError(f"Video NACK 太短: {len(data)} bytes")
-        magic, version, msg_type, reserved, frame_id = struct.unpack('=HBBBI', data[:9])
-        if magic != MAGIC or msg_type != MSG_TYPE_VIDEO_NACK:
-            raise ValueError("不是 Video NACK")
-        crc_received = struct.unpack('=I', data[-4:])[0]
-        crc_calculated = zlib.crc32(data[:-4]) & 0xffffffff
-        if crc_received != crc_calculated:
-            raise ValueError("CRC 校验失败")
-        num_chunks = struct.unpack('=H', data[9:11])[0]
-        missing = []
-        for i in range(num_chunks):
-            offset = 11 + i * 2
-            missing.append(struct.unpack('=H', data[offset:offset + 2])[0])
-        return frame_id, missing
+            chunks += struct.pack('=H', idx)
+        return Protocol._seal(Protocol._build_header(MSG_TYPE_VIDEO_NACK, frame_id) + chunks)
 
     @staticmethod
     def build_param_update(seq: int, t1: float, params: dict) -> bytes:
-        """构建参数修改消息 — payload 为 JSON"""
+        """构建参数修改消息（payload 为 JSON）"""
         payload = json.dumps(params).encode('utf-8')
-        header = struct.pack('=HBBBI', MAGIC, VERSION, MSG_TYPE_PARAM_UPDATE, 0, seq)
-        timestamp = struct.pack('=d', t1)
-        msg = header + timestamp + payload
-        crc = zlib.crc32(msg) & 0xffffffff
-        return msg + struct.pack('=I', crc)
+        return Protocol._seal(
+            Protocol._build_header(MSG_TYPE_PARAM_UPDATE, seq) + struct.pack('=d', t1) + payload
+        )
 
     @staticmethod
     def build_param_query(seq: int, t1: float) -> bytes:
         """构建参数查询消息"""
-        header = struct.pack('=HBBBI', MAGIC, VERSION, MSG_TYPE_PARAM_QUERY, 0, seq)
-        timestamp = struct.pack('=d', t1)
-        msg = header + timestamp
-        crc = zlib.crc32(msg) & 0xffffffff
-        return msg + struct.pack('=I', crc)
+        return Protocol._seal(
+            Protocol._build_header(MSG_TYPE_PARAM_QUERY, seq) + struct.pack('=d', t1)
+        )
+
+    # -------------------------------------------------------------------------
+    # 解析方法
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def parse_message(data: bytes) -> Tuple[int, int, float, Optional[bytes]]:
+        """解析通用消息，返回 (msg_type, seq, t1, payload)"""
+        msg_type, seq = Protocol._parse_header(data, min_len=18)
+        t1 = struct.unpack('=d', data[9:17])[0]
+        payload = data[17:-4] if len(data) > 21 else None
+        return msg_type, seq, t1, payload
+
+    @staticmethod
+    def parse_ack(data: bytes) -> Tuple[int, float, float]:
+        """解析 ACK 消息，返回 (seq, t2, t3)"""
+        _, seq = Protocol._parse_header(data, min_len=25, expected_type=MSG_TYPE_ACK)
+        t2, t3 = struct.unpack('=dd', data[9:25])
+        return seq, t2, t3
+
+    @staticmethod
+    def parse_heartbeat(data: bytes) -> Tuple[int, float]:
+        """解析心跳消息，返回 (seq, t1)"""
+        _, seq = Protocol._parse_header(data, min_len=21, expected_type=MSG_TYPE_HEARTBEAT)
+        t1 = struct.unpack('=d', data[9:17])[0]
+        return seq, t1
+
+    @staticmethod
+    def parse_video_ack(data: bytes) -> int:
+        """解析视频帧 ACK，返回 frame_id"""
+        _, frame_id = Protocol._parse_header(data, min_len=13, expected_type=MSG_TYPE_VIDEO_ACK)
+        return frame_id
+
+    @staticmethod
+    def parse_video_nack(data: bytes) -> tuple:
+        """解析视频帧 NACK，返回 (frame_id, [missing_chunk_indices])"""
+        _, frame_id = Protocol._parse_header(data, min_len=15, expected_type=MSG_TYPE_VIDEO_NACK)
+        num_chunks = struct.unpack('=H', data[9:11])[0]
+        missing = [struct.unpack('=H', data[11 + i * 2: 13 + i * 2])[0] for i in range(num_chunks)]
+        return frame_id, missing
